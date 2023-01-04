@@ -1,4 +1,5 @@
-import type { IGameFile } from '../types/games';
+import { assert } from '../test/test-tools';
+import type { GameFileTests, IGameFile } from '../types/games';
 import {
 	game as sameBattleEliminationTournamentGame, SameBattleEliminationTournament
 } from './templates/same-battle-elimination-tournament';
@@ -13,11 +14,25 @@ class SameSix extends SameBattleEliminationTournament {
 	htmlPageGameDescription = description;
 }
 
+const tests: GameFileTests<SameSix> = {
+	'should not contain formes that cannot evolve': {
+		test(game): void {
+			if (game.format.variant) return;
+			const pokedex = game.createBasePokedex();
+			assert(pokedex.includes("Raichu"));
+			assert(!pokedex.includes("Pikachu"));
+			assert(!pokedex.includes("Pikachu-Original"));
+			assert(!pokedex.includes("Pikachu-Hoenn"));
+		},
+	},
+};
+
 export const game: IGameFile<SameSix> = Games.copyTemplateProperties(sameBattleEliminationTournamentGame, {
 	aliases: ['ssix'],
 	class: SameSix,
 	description,
 	name,
+	tests: Object.assign({}, sameBattleEliminationTournamentGame.tests, tests),
 	variants: [
 		{
 			name: "Monocolor Same Six",
@@ -41,7 +56,7 @@ export const game: IGameFile<SameSix> = Games.copyTemplateProperties(sameBattleE
 			name: "Same Six Ubers",
 			canChangeFormat: false,
 			requiredTier: "Uber",
-			battleFormatId: "ubers",
+			battleFormatId: "gen8ubers",
 			variantAliases: ["ubers"],
 		},
 		{
@@ -54,35 +69,35 @@ export const game: IGameFile<SameSix> = Games.copyTemplateProperties(sameBattleE
 			name: "Same Six UU",
 			canChangeFormat: false,
 			requiredTier: "UU",
-			battleFormatId: "uu",
+			battleFormatId: "gen8uu",
 			variantAliases: ["uu"],
 		},
 		{
 			name: "Same Six RU",
 			canChangeFormat: false,
 			requiredTier: "RU",
-			battleFormatId: "ru",
+			battleFormatId: "gen8ru",
 			variantAliases: ["ru"],
 		},
 		{
 			name: "Same Six NU",
 			canChangeFormat: false,
 			requiredTier: "NU",
-			battleFormatId: "nu",
+			battleFormatId: "gen8nu",
 			variantAliases: ["nu"],
 		},
 		{
 			name: "Same Six PU",
 			canChangeFormat: false,
 			requiredTier: "PU",
-			battleFormatId: "pu",
+			battleFormatId: "gen8pu",
 			variantAliases: ["pu"],
 		},
 		{
 			name: "Same Six ZU",
 			canChangeFormat: false,
 			requiredTier: "ZU",
-			battleFormatId: "zu",
+			battleFormatId: "gen8zu",
 			variantAliases: ["zu"],
 		},
 		{
@@ -90,7 +105,7 @@ export const game: IGameFile<SameSix> = Games.copyTemplateProperties(sameBattleE
 			canChangeFormat: false,
 			requiredTier: "LC",
 			fullyEvolved: false,
-			battleFormatId: "lc",
+			battleFormatId: "gen8lc",
 			variantAliases: ["lc", "little cup"],
 		},
 	],

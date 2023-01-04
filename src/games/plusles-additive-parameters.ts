@@ -12,7 +12,6 @@ const paramTypes: ParamType[] = ['move', 'tier', 'color', 'type', 'egggroup', 'a
 
 class PluslesAdditiveParameters extends ScriptedGame {
 	canAdd: boolean = false;
-	currentPlayer: Player | null = null;
 	maxPlayers: number = 20;
 	minimumResults: number = 30;
 	maximumResults: number = 50;
@@ -79,7 +78,7 @@ class PluslesAdditiveParameters extends ScriptedGame {
 			this.prng = new PRNG(result.prngSeed);
 
 			this.onUhtml(uhtmlName, html, () => {
-				this.timeout = setTimeout(() => this.nextRound(), 5000);
+				this.setTimeout(() => this.nextRound(), 5000);
 			});
 			this.sayUhtmlAuto(uhtmlName, html);
 			return;
@@ -111,7 +110,7 @@ class PluslesAdditiveParameters extends ScriptedGame {
 				this.canAdd = true;
 				this.onCommands(['add'], {max: 1}, () => this.nextRound());
 				this.currentPlayer = currentPlayer!;
-				this.timeout = setTimeout(() => {
+				this.setTimeout(() => {
 					this.say("Time is up!");
 					this.nextRound();
 				}, this.roundTime);

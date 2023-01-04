@@ -34,7 +34,6 @@ const maximumMoveAvailability = 500;
 
 class SpindasExcludedPokemon extends ScriptedGame {
 	canLateJoin = true;
-	currentPlayer: Player | null = null;
 	excludedHint: string = '';
 	excludedRound: number = 0;
 	guessedPokemon: string[] = [];
@@ -127,7 +126,7 @@ class SpindasExcludedPokemon extends ScriptedGame {
 			"the parameter with ``" + Config.commandCharacter + "g [parameter]``!";
 
 		this.on(text, () => {
-			this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+			this.setTimeout(() => this.nextRound(), 5 * 1000);
 		});
 
 		this.say(text);
@@ -210,7 +209,7 @@ class SpindasExcludedPokemon extends ScriptedGame {
 			if (this.getRemainingPlayerCount() < 2) {
 				this.say("The parameter was __" + this.parameter + "__.");
 				this.parameter = '';
-				this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+				this.setTimeout(() => this.nextRound(), 5 * 1000);
 				return;
 			}
 
@@ -224,7 +223,7 @@ class SpindasExcludedPokemon extends ScriptedGame {
 		const text = "**" + currentPlayer.name + "** you are up!";
 		this.on(text, () => {
 			this.currentPlayer = currentPlayer;
-			this.timeout = setTimeout(() => this.nextRound(), 30 * 1000);
+			this.setTimeout(() => this.nextRound(), 30 * 1000);
 		});
 		this.say(text);
 	}
@@ -330,7 +329,7 @@ const commands: GameCommandDefinitions<SpindasExcludedPokemon> = {
 					return true;
 				} else {
 					this.parameter = '';
-					this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+					this.setTimeout(() => this.nextRound(), 5 * 1000);
 				}
 			} else {
 				this.say("Incorrect! " + player.name + " can no longer guess this round.");

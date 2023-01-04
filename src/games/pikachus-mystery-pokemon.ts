@@ -49,6 +49,8 @@ class PikachusMysteryPokemon extends QuestionAndAnswer {
 				region = 'Alola';
 			} else if (pokemon.gen === 8) {
 				region = 'Galar';
+			} else if (pokemon.gen === 9) {
+				region = 'Paldea';
 			}
 
 			if (region) pokemonHints.push("<b>Region</b>: " + region);
@@ -100,12 +102,12 @@ class PikachusMysteryPokemon extends QuestionAndAnswer {
 					this.end();
 					return;
 				}
-				this.timeout = setTimeout(() => this.nextRound(), 5000);
+				this.setTimeout(() => this.nextRound(), 5000);
 			});
 			this.say(text);
 			return;
 		} else {
-			this.timeout = setTimeout(() => this.nextRound(), this.updateHintTime);
+			this.setTimeout(() => this.nextRound(), this.updateHintTime);
 		}
 	}
 

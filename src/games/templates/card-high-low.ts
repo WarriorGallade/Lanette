@@ -1,8 +1,9 @@
 import type { Player } from '../../room-activity';
 import type { GameCommandDefinitions, IGameTemplateFile } from '../../types/games';
 import type { ICard } from './card';
-import { Card, game as cardGame } from './card';
+import { CardGame, game as cardGame } from './card';
 import type { IPokemon } from '../../types/pokemon-showdown';
+import type { CardHighLowPage } from '../../html-pages/activity-pages/card-high-low';
 
 export interface IRoundCardInfo {
 	card: ICard;
@@ -10,7 +11,9 @@ export interface IRoundCardInfo {
 	player?: Player;
 }
 
-export abstract class CardHighLow extends Card {
+const PLAY_COMMAND = "play";
+
+export abstract class CardHighLow extends CardGame {
 	abstract categoryAbbreviations: Dict<string>;
 	abstract categoryNames: Dict<string>;
 	abstract detailCategories: string[];
@@ -22,7 +25,9 @@ export abstract class CardHighLow extends Card {
 	currentCategory: string = '';
 	detailLabelWidth: number = 50;
 	highOrLow: 'High' | 'Low' = 'High';
+	htmlPages = new Map<Player, CardHighLowPage>();
 	maxPlayers: number = 20;
+	playCommand: string = PLAY_COMMAND;
 	points = new Map<Player, number>();
 	roundDrawAmount: number = 1;
 	roundPlays = new Map<Player, ICard>();
@@ -40,28 +45,47 @@ export abstract class CardHighLow extends Card {
 	}
 
 	createDeck(): void {
-		if (!this.deckPool.length) this.createDeckPool();
-		this.deck = this.shuffle(this.deckPool);
+		this.deck = this.shuffle(this.deckPool.map(x => Tools.deepClone(x)));
 	}
 
 	onSignups(): void {
-		this.createDeck();
 		if (!this.format.inputOptions.points) this.options.points = 5;
 	}
 
 	onStart(): void {
+		this.createDeckPool();
 		this.createDeck();
+
 		this.say("Now sending out cards!");
 		for (const i in this.players) {
 			this.giveStartingCards(this.players[i]);
-			this.sendPlayerCards(this.players[i]);
+			this.sendHtmlPage(this.players[i]);
 		}
+
 		this.nextRound();
 	}
 
 	getCardChatDetails(card: ICard): string {
-		return Tools.getHexLabel(Tools.getNamedHexCode('Black'), this.getCardDetail(card, this.currentCategory) + '<br />' +
+		return Tools.getTypeOrColorLabel(Tools.getNamedHexCode('Black'), this.getCardDetail(card, this.currentCategory) + '<br />' +
 			this.categoryAbbreviations[this.currentCategory], this.detailLabelWidth);
+	}
+
+	createHtmlPage(player: Player): CardHighLowPage {
+		if (this.htmlPages.has(player)) return this.htmlPages.get(player)!;
+
+		const gameActionLocation = this.getGameActionLocation(player);
+		const page = new (CommandParser.getGameHtmlPages().cardHighLow)(this, player, this.htmlPageCommand, {
+			customBox: this.getPlayerOrPickedCustomBox(player),
+			detailLabelWidth: this.detailLabelWidth,
+			sendToChat: gameActionLocation === 'chat',
+			showColors: false,
+			showEggGroups: false,
+			showTypings: false,
+		});
+
+		this.htmlPages.set(player, page);
+
+		return page;
 	}
 
 	sortCardInfoForRound(cardInfo: IRoundCardInfo[]): IRoundCardInfo[] {
@@ -70,75 +94,6 @@ export abstract class CardHighLow extends Card {
 			if (sortHigh) return b.detail - a.detail;
 			return a.detail - b.detail;
 		});
-	}
-
-	getCardsPrivateHtml(cards: ICard[], player?: Player): string {
-		const cardInfo: {card: ICard; detail: number}[] = [];
-		for (const card of cards) {
-			cardInfo.push({card: card, detail: this.getCardDetail(card, this.currentCategory)});
-		}
-
-		const sorted = this.sortCardInfoForRound(cardInfo);
-
-		const canPlay = this.currentCategory && player && !this.roundPlays.has(player);
-		let bestDetail = -1;
-		if (canPlay) {
-			bestDetail = sorted[0].detail;
-		}
-
-		const data = Dex.getData();
-		const cardsHtml: string[] = [];
-		for (const info of sorted) {
-			const card = info.card;
-			let cardHtml = '<div class="infobox">';
-			if (canPlay) {
-				cardHtml += Client.getQuietPmButton(this.room, Config.commandCharacter + "play " + card.name, "Play!") +
-					'&nbsp;&nbsp;|&nbsp;';
-			}
-
-			const currentHex = Tools.getNamedHexCode('Black');
-			let otherCategoryHex = currentHex;
-			if (data.pokemonKeys.includes(card.id)) {
-				const pokemon = Dex.getExistingPokemon(card.id);
-				cardHtml += Dex.getPokemonIcon(pokemon);
-				otherCategoryHex = Tools.getPokemonColorHexCode(pokemon.color)!;
-			} else if (data.moveKeys.includes(card.id)) {
-				const move = Dex.getExistingMove(card.id);
-				cardHtml += Dex.getMoveCategoryIcon(move) + "&nbsp;";
-				otherCategoryHex = Tools.getMoveCategoryHexCode(move.category)!;
-			}
-
-			const bolded = canPlay && info.detail === bestDetail;
-			if (bolded) {
-				cardHtml += '<b>' + card.name + '</b>';
-			} else {
-				cardHtml += card.name + '';
-			}
-
-			if (this.currentCategory) {
-				cardHtml += '&nbsp;|&nbsp;<b>Current category</b>:&nbsp;' + Tools.getHexLabel(currentHex, info.detail +
-					'<br /><span title="' + this.categoryNames[this.currentCategory] + '">' +
-					this.categoryAbbreviations[this.currentCategory] + '</span>', this.detailLabelWidth);
-
-				cardHtml += '<br />';
-
-				const otherCategories: string[] = [];
-				for (const category of this.detailCategories) {
-					if (category === this.currentCategory) continue;
-					const detail = '' + this.getCardDetail(card, category);
-					otherCategories.push(Tools.getHexLabel(otherCategoryHex, detail +
-						'<br /><span title="' + this.categoryNames[category] + '">' +
-						this.categoryAbbreviations[category] + '</span>', this.detailLabelWidth));
-				}
-				cardHtml += '<div>' + otherCategories.join('&nbsp;|&nbsp;') + '</div>';
-			}
-
-			cardHtml += '</div>';
-
-			cardsHtml.push(cardHtml);
-		}
-
-		return cardsHtml.join("<br />");
 	}
 
 	scoreRound(): void {
@@ -190,9 +145,9 @@ export abstract class CardHighLow extends Card {
 		const uhtmlName = this.uhtmlBaseName + '-round-score';
 		this.onUhtml(uhtmlName, html, () => {
 			if (ended) {
-				this.timeout = setTimeout(() => this.end(), 5000);
+				this.setTimeout(() => this.end(), 5000);
 			} else {
-				this.timeout = setTimeout(() => this.nextRound(), 5000);
+				this.setTimeout(() => this.nextRound(), 5000);
 			}
 		});
 		this.sayUhtml(uhtmlName, html);
@@ -221,14 +176,18 @@ export abstract class CardHighLow extends Card {
 				"**!";
 			this.on(text, () => {
 				this.canPlay = true;
-				this.timeout = setTimeout(() => {
+				this.setTimeout(() => {
 					this.scoreRound();
 				}, this.sampleOne(this.roundTimes));
 			});
 			this.say(text);
 			for (const i in this.players) {
 				if (!this.players[i].eliminated) {
-					this.sendPlayerCards(this.players[i]);
+					const htmlPage = this.getHtmlPage(this.players[i]);
+					htmlPage.renderHandHtml();
+					htmlPage.renderPlayedCardsHtml();
+					htmlPage.renderDrawnCardsHtml();
+					htmlPage.send();
 				}
 			}
 		});
@@ -262,15 +221,10 @@ export abstract class CardHighLow extends Card {
 
 		this.announceWinners();
 	}
-
-	getPlayerSummary(player: Player): void {
-		if (player.eliminated) return;
-		this.sendPlayerCards(player);
-	}
 }
 
 const commands: GameCommandDefinitions<CardHighLow> = {
-	play: {
+	[PLAY_COMMAND]: {
 		command(target, room, user) {
 			if (!this.canPlay || this.roundPlays.has(this.players[user.id])) return false;
 			const player = this.players[user.id];
@@ -297,8 +251,15 @@ const commands: GameCommandDefinitions<CardHighLow> = {
 			const playedCards = [cards[index]];
 			this.roundPlays.set(player, cards[index]);
 			cards.splice(index, 1);
+
 			const drawnCards = this.drawCard(player, this.roundDrawAmount);
-			this.sendPlayerCards(player, drawnCards, playedCards);
+			const htmlPage = this.getHtmlPage(player);
+			htmlPage.renderCardActionsHtml();
+			htmlPage.renderPlayedCardsHtml(playedCards);
+			htmlPage.renderDrawnCardsHtml(drawnCards);
+			htmlPage.renderHandHtml();
+			htmlPage.send();
+
 			return true;
 		},
 		aliases: ['pmplay'],

@@ -6,6 +6,8 @@ import type {
 	GameCommandDefinitions, GameCommandReturnType, GameFileTests, IGameAchievement, IGameFormat, IGameTemplateFile, IRandomGameAnswer
 } from '../../types/games';
 
+const TEST_TIMEOUT = 30000;
+
 export abstract class QuestionAndAnswer extends ScriptedGame {
 	additionalHintHeader: string = '';
 	allowRepeatCorrectAnswers: boolean = false;
@@ -77,7 +79,7 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 
 	onSignups(): void {
 		if (!this.isMiniGame) {
-			if (this.options.freejoin) this.timeout = setTimeout(() => this.nextRound(), 5000);
+			if (this.options.freejoin) this.setTimeout(() => this.nextRound(), 5000);
 		}
 	}
 
@@ -245,7 +247,8 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 		if (this.ended) return;
 
 		while ((hintKey && Client.checkFilters(hintKey, !this.isPmActivity(this.room) ? this.room : undefined)) ||
-			(this.minimumAnswersPerHint && this.answers.length < this.minimumAnswersPerHint)) {
+			(this.minimumAnswersPerHint && this.answers.length < this.minimumAnswersPerHint) ||
+			this.exceedsMessageSizeLimit(this.getAnswersHtml(this.answers), true, this.hintUhtmlName)) {
 			hintKey = await this.generateHint();
 			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 			if (this.ended) return;
@@ -387,11 +390,11 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 
 		if (typeof roundText === 'string') {
 			this.on(roundText, () => {
-				this.timeout = setTimeout(() => sayHint(), this.beforeNextRoundTime);
+				this.setTimeout(() => sayHint(), this.beforeNextRoundTime);
 			});
 			this.say(roundText);
 		} else if (this.cooldownBetweenRounds) {
-			this.timeout = setTimeout(() => sayHint(), this.cooldownBetweenRounds);
+			this.setTimeout(() => sayHint(), this.cooldownBetweenRounds);
 		} else {
 			sayHint();
 		}
@@ -427,8 +430,7 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 					this.displayAnswers();
 					this.answers = [];
 					if (this.answerTimeout) clearTimeout(this.answerTimeout);
-					if (this.timeout) clearTimeout(this.timeout);
-					this.timeout = setTimeout(() => this.nextRound(), 5000);
+					this.setTimeout(() => this.nextRound(), 5000);
 				}
 				return false;
 			}
@@ -527,8 +529,7 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 	botChallengeTurn(botPlayer: Player, newAnswer: boolean): void {
 		if (!newAnswer) return;
 
-		if (this.botTurnTimeout) clearTimeout(this.botTurnTimeout);
-		this.botTurnTimeout = setTimeout(() => {
+		this.setBotTurnTimeout(() => {
 			const command = this.answerCommands ? this.answerCommands[0] : "g";
 			let answer = this.sampleOne(this.answers);
 			let text = Config.commandCharacter + command + " " + answer.toLowerCase();
@@ -565,10 +566,11 @@ const commands: GameCommandDefinitions<QuestionAndAnswer> = {
 	guess: {
 		command(target, room, user, cmd, timestamp): GameCommandReturnType {
 			if (this.answerCommands && !this.answerCommands.includes(cmd)) return false;
+
 			if (this.pmGuessing) {
 				if (!this.isPm(room, user)) return false;
 			} else {
-				if (this.isPm(room, user) && !this.isMiniGame) return false;
+				if (this.isPm(room, user) && !this.pm) return false;
 			}
 
 			const player = this.createPlayer(user) || this.players[user.id];
@@ -621,7 +623,7 @@ const commands: GameCommandDefinitions<QuestionAndAnswer> = {
 					return true;
 				} else {
 					this.answers = [];
-					this.timeout = setTimeout(() => this.nextRound(), 5000);
+					this.setTimeout(() => this.nextRound(), 5000);
 				}
 			} else {
 				if (this.allowRepeatCorrectAnswers) {
@@ -639,7 +641,7 @@ const commands: GameCommandDefinitions<QuestionAndAnswer> = {
 					if (!this.allowRepeatCorrectAnswers) this.removeAnswer(answer);
 				}
 
-				if (!this.answers.length) this.timeout = setTimeout(() => this.nextRound(), 5000);
+				if (!this.answers.length) this.setTimeout(() => this.nextRound(), 5000);
 			}
 
 			return true;
@@ -655,7 +657,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			async: true,
 		},
 		async test(game): Promise<void> {
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			assert(!game.canGuess);
 			const name = getBasePlayerName() + " 1";
@@ -677,7 +679,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			async: true,
 		},
 		async test(game): Promise<void> {
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			await game.onNextRound();
 			const previousAnswers = game.answers;
@@ -699,7 +701,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			async: true,
 		},
 		async test(game): Promise<void> {
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			if (game.roundTime) {
 				const name = getBasePlayerName() + " 1";
@@ -719,7 +721,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			async: true,
 		},
 		async test(game): Promise<void> {
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			if (game.roundTime) {
 				await game.onNextRound();
@@ -734,7 +736,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			async: true,
 		},
 		async test(game): Promise<void> {
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			if (game.roundTime) {
 				await game.onNextRound();
@@ -751,7 +753,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 		async test(game): Promise<void> {
 			if (game.usesWorkers) return;
 
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 
 			const name = getBasePlayerName() + " 1";
 			const id = Tools.toId(name);
@@ -779,7 +781,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 		},
 		async test(game, format): Promise<void> {
 			if (!format.minigameCommand) return;
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 			const room = game.room;
 			game.deallocate(true);
 
@@ -794,13 +796,38 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			assert(minigame.ended);
 		},
 	},
+	'it should not accept answers in PMs as a room minigame': {
+		config: {
+			async: true,
+		},
+		async test(game, format): Promise<void> {
+			if (!format.minigameCommand) return;
+			this.timeout(TEST_TIMEOUT);
+			const room = game.room as Room;
+			game.deallocate(true);
+
+			const minigame = Games.createGame(room, (format as unknown) as IGameFormat,
+				{pmRoom: room, minigame: true}) as QuestionAndAnswer;
+			minigame.signups();
+			if (minigame.timeout) clearTimeout(minigame.timeout);
+			await minigame.onNextRound();
+			assert(minigame.answers.length);
+			minigame.canGuess = true;
+
+			const name = getBasePlayerName();
+			const user = Users.add(name, Tools.toId(name));
+			room.onUserJoin(user, " ");
+			runCommand('guess', minigame.answers[0], user, user);
+			assert(!minigame.ended);
+		},
+	},
 	'it should properly work in PMs as a minigame': {
 		config: {
 			async: true,
 		},
 		async test(game, format): Promise<void> {
 			if (!format.minigameCommand) return;
-			this.timeout(15000);
+			this.timeout(TEST_TIMEOUT);
 			const room = game.room;
 			game.deallocate(true);
 

@@ -88,7 +88,6 @@ class GrumpigsPokemath extends QuestionAndAnswer {
 		return result;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/require-await
 	async customGenerateHint(): Promise<void> {
 		let operation = this.sampleOne(OPERATIONS);
 		while (operation === this.lastOperation) {
@@ -165,6 +164,7 @@ export const game: IGameFile<GrumpigsPokemath> = Games.copyTemplateProperties(qu
 	},
 	defaultOptions: ['points'],
 	description: "Players guess Pokemon whose dex numbers match the answers to the given math problems!",
+	disabled: true,
 	freejoin: true,
 	name: "Grumpig's Pokemath",
 	mascot: "Grumpig",

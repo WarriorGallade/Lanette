@@ -15,9 +15,10 @@ class CloakAndDagger extends BattleEliminationTournament {
 	htmlPageGameDescription = description;
 	requiredTier = "OU";
 	usesCloakedPokemon = true;
+	banlist = ['Zorua', 'Zoroark'];
 
-	getCustomRules(): string[] {
-		return [];
+	getGameCustomRules(): string[] {
+		return ['-Zorua-Base', '-Zorua-Hisui', '-Zoroark-Base', '-Zoroark-Hisui', '-Illusion'];
 	}
 
 }
@@ -31,49 +32,49 @@ export const game: IGameFile<CloakAndDagger> = Games.copyTemplateProperties(elim
 		{
 			name: "Cloak and Dagger Ubers",
 			canChangeFormat: false,
-			battleFormatId: "ubers",
+			battleFormatId: "gen8ubers",
 			requiredTier: "Uber",
 			variantAliases: ["ubers", "uber"],
 		},
 		{
 			name: "Cloak and Dagger UU",
 			canChangeFormat: false,
-			battleFormatId: "uu",
+			battleFormatId: "gen8uu",
 			requiredTier: "UU",
 			variantAliases: ["uu"],
 		},
 		{
 			name: "Cloak and Dagger RU",
 			canChangeFormat: false,
-			battleFormatId: "ru",
+			battleFormatId: "gen8ru",
 			requiredTier: "RU",
 			variantAliases: ["ru"],
 		},
 		{
 			name: "Cloak and Dagger NU",
 			canChangeFormat: false,
-			battleFormatId: "nu",
+			battleFormatId: "gen8nu",
 			requiredTier: "NU",
 			variantAliases: ["nu"],
 		},
 		{
 			name: "Cloak and Dagger PU",
 			canChangeFormat: false,
-			battleFormatId: "pu",
+			battleFormatId: "gen8pu",
 			requiredTier: "PU",
 			variantAliases: ["pu"],
 		},
 		{
 			name: "Cloak and Dagger ZU",
 			canChangeFormat: false,
-			battleFormatId: "zu",
+			battleFormatId: "gen8zu",
 			requiredTier: "ZU",
 			variantAliases: ["zu"],
 		},
 		{
 			name: "Cloak and Dagger LC",
 			canChangeFormat: false,
-			battleFormatId: "lc",
+			battleFormatId: "gen8lc",
 			requiredTier: "LC",
 			variantAliases: ["lc", "little cup"],
 		},

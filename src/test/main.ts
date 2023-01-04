@@ -4,46 +4,45 @@ import Mocha = require('mocha');
 import path = require('path');
 import stream = require('stream');
 
+import type { RunOptionNames, RunOptions } from '../types/root';
 import { createTestRoom, testOptions } from './test-tools';
 
-const rootFolder = path.resolve(__dirname, '..', '..');
 const modulesDir = path.join(__dirname, 'modules');
 const moduleTests = fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'));
 const pokemonShowdownTestFile = 'pokemon-showdown.js';
 const nonTrivialGameLoadTime = 200;
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const noOp = (): void => {};
-const methodsToNoOp = ['appendFile', 'chmod', 'rename', 'rmdir', 'symlink', 'unlink', 'watchFile', 'writeFile'];
-for (const method of methodsToNoOp) {
-	// @ts-expect-error
-	fs[method] = noOp;
-	// @ts-expect-error
-	fs[method + 'Sync'] = noOp;
+export function initializeTests(inputOptions: RunOptions): void {
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	const noOp = (): void => {};
+	const methodsToNoOp = ['appendFile', 'chmod', 'rename', 'rmdir', 'symlink', 'unlink', 'watchFile', 'writeFile'];
+	for (const method of methodsToNoOp) {
+		// @ts-expect-error
+		fs[method] = noOp;
+		// @ts-expect-error
+		fs[method + 'Sync'] = noOp;
 
-	// @ts-expect-error
-	fsPromises[method] = () => Promise.resolve(); // eslint-disable-line @typescript-eslint/promise-function-async
-}
+		// @ts-expect-error
+		fsPromises[method] = () => Promise.resolve(); // eslint-disable-line @typescript-eslint/promise-function-async
+	}
 
-Object.assign(fs, {createWriteStream() {
-	return new stream.Writable();
-}});
+	Object.assign(fs, {createWriteStream() {
+		return new stream.Writable();
+	}});
 
-module.exports = (inputOptions: Dict<string>): void => {
-	for (const i in inputOptions) {
-		testOptions[i] = inputOptions[i];
+	const keys = Object.keys(inputOptions) as RunOptionNames[];
+	for (const key of keys) {
+		testOptions[key] = inputOptions[key];
 	}
 
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-call
-		require(path.join(rootFolder, 'build', 'app.js'))();
 		clearInterval(Storage.globalDatabaseExportInterval);
 
 		// allow tests to assert on Client's outgoingMessageQueue
 		// @ts-expect-error
-		Client.webSocket = {};
+		Client.websocket.ws = {};
 		// @ts-expect-error
-		Client.pauseOutgoingMessages = true;
+		Client.websocket.pauseOutgoingMessages();
 
 		// @ts-expect-error
 		Client.publicChatRooms = ['mocha'];
@@ -117,10 +116,14 @@ module.exports = (inputOptions: Dict<string>): void => {
 		const mochaRunsOption = testOptions.mochaRuns ? parseInt(testOptions.mochaRuns) : 0;
 		const maxMochaRuns = !isNaN(mochaRunsOption) ? Math.max(1, mochaRunsOption) : 1;
 
-		const mocha = new Mocha({
+		const mochaOptions: Mocha.MochaInstanceOptions = {
 			reporter: 'spec',
 			ui: 'bdd',
-		});
+		};
+
+		if (testOptions.grep) mochaOptions.grep = testOptions.grep;
+
+		const mocha = new Mocha(mochaOptions);
 
 		if (modulesToTest.includes(pokemonShowdownTestFile)) mocha.addFile(path.join(__dirname, pokemonShowdownTestFile));
 
@@ -151,4 +154,4 @@ module.exports = (inputOptions: Dict<string>): void => {
 		Games.unrefWorkers();
 		process.exit(1);
 	}
-};
+}

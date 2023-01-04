@@ -15,7 +15,6 @@ class BuzzwolesFizzBuzz extends ScriptedGame {
 	playerList: Player[] = [];
 	timeLimit: number = 20 * 60 * 1000;
 	quizRound: number = 0;
-	currentPlayer: Player | null = null;
 	currentNumber: number = 0;
 	firstMultiple: number = 0;
 	maxNumber: number = 100;
@@ -98,10 +97,10 @@ class BuzzwolesFizzBuzz extends ScriptedGame {
 		const html = this.getRoundHtml(players => this.getPlayerNames(players));
 		const uhtmlName = this.uhtmlBaseName + '-round-html';
 		this.onUhtml(uhtmlName, html, () => {
-			this.timeout = setTimeout(() => {
+			this.setTimeout(() => {
 				const text = "Replace every multiple of **" + this.firstMultiple + "** with a " + firstCategory + " and replace every " +
 					"multiple of **" + this.secondMultiple + "** with a " + secondCategory + "!";
-				this.on(text, () => this.timeout = setTimeout(() => this.nextRound(), 10 * 1000));
+				this.on(text, () => this.setTimeout(() => this.nextRound(), 10 * 1000));
 				this.say(text);
 			}, 5000);
 		});
@@ -149,7 +148,7 @@ class BuzzwolesFizzBuzz extends ScriptedGame {
 		const text = player.name + " you are up! | Current number: " + this.currentNumber;
 		this.on(text, () => {
 			this.currentPlayer = player;
-			this.timeout = setTimeout(() => this.nextRound(), 10 * 1000);
+			this.setTimeout(() => this.nextRound(), 10 * 1000);
 		});
 		this.say(text);
 	}
@@ -171,6 +170,7 @@ const commands: GameCommandDefinitions<BuzzwolesFizzBuzz> = {
 	fizz: {
 		command(target, room, user) {
 			if (!this.currentPlayer || this.players[user.id] !== this.currentPlayer) return false;
+
 			if (this.timeout) clearTimeout(this.timeout);
 			const guess = Tools.toId(target);
 			let match = false;

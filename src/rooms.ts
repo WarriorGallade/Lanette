@@ -8,7 +8,7 @@ import type {
 } from "./types/client";
 import type { IFormat } from "./types/pokemon-showdown";
 import type { IRepeatedMessage, IRoomMessageOptions, RoomType } from "./types/rooms";
-import type { IUserHostedTournament } from "./types/tournaments";
+import type { IUserHostedTournament, TournamentType } from "./types/tournaments";
 import type { User } from "./users";
 
 type RoomCreateListener = (room: Room) => void;
@@ -337,6 +337,7 @@ export class Room {
 
 		const options: IRoomMessageOptions = {
 			html: Client.getListenerHtml(html),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'chat-html',
@@ -353,6 +354,7 @@ export class Room {
 		const options: IRoomMessageOptions = {
 			uhtmlName,
 			html: Client.getListenerUhtml(html),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'chat-uhtml',
@@ -369,9 +371,10 @@ export class Room {
 		const options: IRoomMessageOptions = {
 			uhtmlName,
 			html: Client.getListenerUhtml(html),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
-			type: 'chat-uhtml',
+			type: 'chat-uhtml-change',
 		};
 
 		if (additionalAttributes) Object.assign(options, additionalAttributes);
@@ -385,6 +388,7 @@ export class Room {
 		this.say("/addrankuhtml +, " + uhtmlName + ", " + html, {
 			uhtmlName,
 			html: Client.getListenerUhtml(html),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'chat-uhtml',
@@ -397,9 +401,10 @@ export class Room {
 		this.say("/changerankuhtml +, " + uhtmlName + ", " + html, {
 			uhtmlName,
 			html: Client.getListenerUhtml(html),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
-			type: 'chat-uhtml',
+			type: 'chat-uhtml-change',
 		});
 	}
 
@@ -407,6 +412,8 @@ export class Room {
 		if (!Tools.checkHtml(this, html)) return;
 
 		this.say("/addrankuhtml " + Client.getGroupSymbols()[rank] + ", " + uhtmlName + ", " + html, {
+			uhtmlName,
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			dontMeasure: true,
@@ -418,6 +425,8 @@ export class Room {
 		if (!Tools.checkHtml(this, html)) return;
 
 		this.say("/changerankuhtml " + Client.getGroupSymbols()[rank] + ", " + uhtmlName + ", " + html, {
+			uhtmlName,
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			dontMeasure: true,
@@ -433,6 +442,7 @@ export class Room {
 
 		const options: IRoomMessageOptions = {
 			userid: user.id,
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'private-html',
@@ -451,9 +461,11 @@ export class Room {
 
 		const options: IRoomMessageOptions = {
 			userid: user.id,
+			uhtmlName,
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
-			type: 'private-html',
+			type: 'private-uhtml',
 		};
 
 		if (additionalAttributes) Object.assign(options, additionalAttributes);
@@ -470,9 +482,11 @@ export class Room {
 
 		const options: IRoomMessageOptions = {
 			userid: user.id,
+			uhtmlName,
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
-			type: 'private-html',
+			type: 'private-uhtml-change',
 		};
 
 		if (additionalAttributes) Object.assign(options, additionalAttributes);
@@ -488,6 +502,7 @@ export class Room {
 
 		const options: IRoomMessageOptions = {
 			html: Client.getListenerHtml(html, true),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'pm-html',
@@ -508,6 +523,7 @@ export class Room {
 		const options: IRoomMessageOptions = {
 			uhtmlName,
 			html: Client.getListenerUhtml(html, true),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
 			type: 'pm-uhtml',
@@ -528,9 +544,10 @@ export class Room {
 		const options: IRoomMessageOptions = {
 			uhtmlName,
 			html: Client.getListenerUhtml(html, true),
+			rawHtml: html,
 			dontCheckFilter: true,
 			dontPrepare: true,
-			type: 'pm-uhtml',
+			type: 'pm-uhtml-change',
 			userid: user.id,
 		};
 
@@ -633,6 +650,7 @@ export class Room {
 			type: 'htmlpage',
 			userid: user.id,
 			pageId: Users.self.id + "-" + pageId,
+			rawHtml: html,
 		};
 
 		if (additionalAttributes) Object.assign(options, additionalAttributes);
@@ -653,6 +671,7 @@ export class Room {
 			type: 'htmlpageselector',
 			userid: user.id,
 			pageId: Users.self.id + "-" + pageId,
+			rawHtml: html,
 			selector,
 		};
 
@@ -727,10 +746,10 @@ export class Room {
 		});
 	}
 
-	createTournament(format: IFormat, type: 'elimination' | 'roundrobin', cap: number, tournamentName?: string): void {
+	createTournament(format: IFormat, type: TournamentType, cap: number, name?: string): void {
 		if (this.tournament) return;
 
-		this.say("/tour new " + format.id + ", " + type + "," + cap + (tournamentName ? ",1," + tournamentName : ""), {
+		this.say("/tour new " + format.id + ", " + type + "," + cap + (name ? ",1," + name : ""), {
 			filterSend: () => !this.tournament,
 			dontCheckFilter: true,
 			dontPrepare: true,
@@ -1004,10 +1023,14 @@ export class Rooms {
 		return room;
 	}
 
-	search(input: string): Room | undefined {
+	getTargetId(input: string): string {
 		let id = Tools.toRoomId(input);
 		if (Config.roomAliases && !(id in this.rooms) && Config.roomAliases[id]) id = Config.roomAliases[id];
-		return this.get(id);
+		return id;
+	}
+
+	search(input: string): Room | undefined {
+		return this.get(this.getTargetId(input));
 	}
 
 	updateConfigSettings(): void {

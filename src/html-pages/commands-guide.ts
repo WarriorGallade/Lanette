@@ -3,7 +3,7 @@ import type { BaseCommandDefinitions } from "../types/command-parser";
 import type { User } from "../users";
 import { Pagination } from "./components/pagination";
 import type { IPageElement } from "./components/pagination";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 
 const baseCommand = 'commandsguide';
 const chooseDeveloper = 'choosedeveloper';
@@ -14,11 +14,8 @@ const chooseTournament = 'choosetournament';
 const chooseUserHostedGame = 'chooseuserhostedgame';
 const chooseUtil = 'chooseutil';
 const commandPageCommand = 'commandspage';
-const closeCommand = 'close';
 
-const pageId = 'commands-guide';
-
-export const id = pageId;
+export const pageId = 'commands-guide';
 export const pages: Dict<CommandsGuide> = {};
 
 class CommandsGuide extends HtmlPageBase {
@@ -32,9 +29,10 @@ class CommandsGuide extends HtmlPageBase {
 		super(room, user, baseCommand, pages);
 
 		this.commandPrefix = Config.commandCharacter + baseCommand;
+		this.setCloseButton();
 
 		this.showDeveloperCommands = user.isDeveloper();
-		this.commandsPagination = new Pagination(this.room, this.commandPrefix, commandPageCommand, {
+		this.commandsPagination = new Pagination(this, this.commandPrefix, commandPageCommand, {
 			elements: [],
 			elementsPerRow: 1,
 			rowsPerPage: 20,
@@ -163,7 +161,7 @@ class CommandsGuide extends HtmlPageBase {
 
 	render(): string {
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + Users.self.name + " Commands Guide</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br /><br />";
 
 		const developerView = this.currentView === 'developer';
@@ -217,7 +215,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new CommandsGuide(botRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new CommandsGuide(botRoom, user);
 
 			if (cmd === chooseDeveloper) {
 				pages[user.id].chooseDeveloper();
@@ -233,7 +231,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].chooseUserHostedGame();
 			} else if (cmd === chooseUtil) {
 				pages[user.id].chooseUtil();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

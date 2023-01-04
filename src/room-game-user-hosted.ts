@@ -1,3 +1,4 @@
+import { CLOSE_COMMAND } from "./html-pages/html-page-base";
 import type { Player } from "./room-activity";
 import { Game } from "./room-game";
 import type { Room } from "./rooms";
@@ -176,7 +177,8 @@ export class UserHostedGame extends Game {
 		if (user) {
 			this.room.pmHtml(user, "To assist with your game, try using the <b>Host Control Panel</b>! It allows you to manage " +
 				"attributes of your game, display trainers & Pokemon, and generate hints.<br /><br />" +
-				Client.getPmSelfButton(Config.commandCharacter + "gamehostcontrolpanel " + this.room.title, "Open panel"));
+				Client.getPmSelfButton(Config.commandCharacter + CommandParser.getGameHtmlPages().gameHostControlPanel.baseCommand +
+				" " + this.room.title, "Open panel"));
 		}
 	}
 
@@ -185,8 +187,9 @@ export class UserHostedGame extends Game {
 
 		const user = Users.get(this.subHostName || this.hostName);
 		if (user) {
-			CommandParser.parse(user, user, Config.commandCharacter + "gamehostcontrolpanel " + this.room.title + ", autorefresh",
-				Date.now());
+			const panel = CommandParser.getGameHtmlPages().gameHostControlPanel;
+			CommandParser.parse(user, user, Config.commandCharacter + panel.baseCommand + " " + this.room.title + ", " +
+				panel.autoRefreshCommand, Date.now());
 		}
 	}
 
@@ -195,8 +198,8 @@ export class UserHostedGame extends Game {
 
 		const user = Users.get(this.subHostName || this.hostName);
 		if (user) {
-			CommandParser.parse(user, user, Config.commandCharacter + "gamehostcontrolpanel " + this.room.title + ", close",
-				Date.now());
+			CommandParser.parse(user, user, Config.commandCharacter + CommandParser.getGameHtmlPages().gameHostControlPanel.baseCommand +
+				" " + this.room.title + ", " + CLOSE_COMMAND, Date.now());
 		}
 	}
 
@@ -834,14 +837,6 @@ export const game: IUserHostedFile = {
 			mascot: "Scyther",
 			description: "Players have to PM the host. Depending on the order in which they PMed, they can win or lose points!",
 			aliases: ['SMS'],
-			freejoin: true,
-		},
-		{
-			name: "Silvally's Single Solutions",
-			mascot: "Silvally",
-			aliases: ['Silvallys'],
-			description: "Players guess two moves which are only learned in combination by the given Pokemon! " +
-				"<a href='https://www.tapatalk.com/groups/ps_game_corner/silvally-s-single-solutions-t1157.html'>More info</a>",
 			freejoin: true,
 		},
 		{

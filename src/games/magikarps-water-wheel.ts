@@ -43,7 +43,6 @@ class MagikarpsWaterWheel extends ScriptedGame {
 	canLateJoin: boolean = true;
 	canSwim: boolean = false;
 	consecutiveWheelSpins = new Map<Player, number>();
-	dontAutoCloseHtmlPages = true;
 	gameActionType = GAME_ACTION_TYPE;
 	maxRound: number = 20;
 	playerWheels = new Map<Player, WheelsKey>();
@@ -199,7 +198,7 @@ class MagikarpsWaterWheel extends ScriptedGame {
 
 			this.onCommands(this.actionCommands, {max: this.getRemainingPlayerCount(), remainingPlayersMax: true}, () => this.nextRound());
 
-			this.timeout = setTimeout(() => this.nextRound(), 30 * 1000);
+			this.setTimeout(() => this.nextRound(), 30 * 1000);
 		});
 		this.sayUhtml(uhtmlName, html);
 	}

@@ -8,7 +8,6 @@ export type Link = IPokemon | IMove | IItem | IAbility;
 export abstract class Chain extends ScriptedGame {
 	acceptsFormes: boolean = false;
 	canReverseLinks: boolean = false;
-	currentPlayer: Player | null = null;
 	keys: string[] = [];
 	letterBased: boolean = true;
 	linkEndCounts: Dict<number> = {};
@@ -105,7 +104,7 @@ export abstract class Chain extends ScriptedGame {
 			this.linkEnds[i] = linkEndsByName[i].length;
 		}
 
-		if (this.options.freejoin) this.timeout = setTimeout(() => this.nextRound(), 5000);
+		if (this.options.freejoin) this.setTimeout(() => this.nextRound(), 5000);
 	}
 
 	onStart(): void {
@@ -182,7 +181,7 @@ export abstract class Chain extends ScriptedGame {
 			text = "The " + this.mascot!.name + " spelled out **" + this.currentLink.name + "**.";
 			this.on(text, () => {
 				if (this.parentGame && this.parentGame.onChildHint) this.parentGame.onChildHint(this.currentLink.name, [], true);
-				this.timeout = setTimeout(() => {
+				this.setTimeout(() => {
 					this.say("Time is up!");
 					this.nextRound();
 				}, this.getRoundTime());
@@ -201,7 +200,7 @@ export abstract class Chain extends ScriptedGame {
 				const html = this.getRoundHtml(players => this.getPlayerNames(players));
 				const uhtmlName = this.uhtmlBaseName + '-round-html';
 				this.onUhtml(uhtmlName, html, () => {
-					this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+					this.setTimeout(() => this.nextRound(), 5 * 1000);
 				});
 				this.sayUhtml(uhtmlName, html);
 				return;
@@ -219,7 +218,7 @@ export abstract class Chain extends ScriptedGame {
 			text = currentPlayer.name + " you are up! The " + this.mascot!.name + " spelled out **" + this.currentLink.name + "**.";
 			this.on(text, () => {
 				this.currentPlayer = currentPlayer!;
-				this.timeout = setTimeout(() => {
+				this.setTimeout(() => {
 					this.say("Time is up! " + this.currentPlayer!.name + " has been eliminated from the game.");
 					this.eliminatePlayer(this.currentPlayer!);
 					this.currentPlayer = null;
@@ -281,8 +280,7 @@ export abstract class Chain extends ScriptedGame {
 	botChallengeTurn(botPlayer: Player, newAnswer: boolean): void {
 		if (!newAnswer) return;
 
-		if (this.botTurnTimeout) clearTimeout(this.botTurnTimeout);
-		this.botTurnTimeout = setTimeout(() => {
+		this.setBotTurnTimeout(() => {
 			let answer = '';
 			const keys = this.shuffle(Object.keys(this.pool));
 			for (const key of keys) {
@@ -337,7 +335,7 @@ const commands: GameCommandDefinitions<Chain> = {
 					this.end();
 					return true;
 				}
-				this.timeout = setTimeout(() => this.nextRound(), 5000);
+				this.setTimeout(() => this.nextRound(), 5000);
 			} else {
 				this.currentPlayer = null;
 				this.setLink(guess);

@@ -7,10 +7,9 @@ import { ColorPicker } from "./components/color-picker";
 import { PokemonPickerBase } from "./components/pokemon-picker-base";
 import { TrainerPicker } from "./components/trainer-picker";
 import type { ITrainerPick } from "./components/trainer-picker";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 import type { PokemonChoices } from "./game-host-control-panel";
 import { PokemonTextInput } from "./components/pokemon-text-input";
-import type { HexCode } from "../types/tools";
 
 const baseCommand = 'gametrainercard';
 const previewCommand = 'preview';
@@ -20,11 +19,8 @@ const choosePokemonPicker = 'choosepokemonpicker';
 const setBackgroundColorCommand = 'setbackgroundcolor';
 const setPokemonCommand = 'setpokemon';
 const setTrainerCommand = 'settrainer';
-const closeCommand = 'close';
 
-const pageId = 'game-trainer-card';
-
-export const id = pageId;
+export const pageId = 'game-trainer-card';
 export const pages: Dict<GameTrainerCard> = {};
 
 class GameTrainerCard extends HtmlPageBase {
@@ -41,16 +37,16 @@ class GameTrainerCard extends HtmlPageBase {
 	constructor(room: Room, user: User, maxIcons: number) {
 		super(room, user, baseCommand, pages);
 
+		this.setCloseButton();
+
 		const database = Storage.getDatabase(this.room);
 		let trainerCard: IGameTrainerCard | undefined;
 		if (database.gameTrainerCards && this.userId in database.gameTrainerCards) trainerCard = database.gameTrainerCards[this.userId];
 
-		this.backgroundColorPicker = new ColorPicker(room, this.commandPrefix, setBackgroundColorCommand, {
+		this.backgroundColorPicker = new ColorPicker(this, this.commandPrefix, setBackgroundColorCommand, {
 			currentPick: trainerCard && typeof trainerCard.background === 'string' ? trainerCard.background : undefined,
-			currentPrimaryColor: trainerCard && trainerCard.background && typeof trainerCard.background !== 'string' ?
-				trainerCard.background.color as HexCode : undefined,
-			currentSecondaryColor: trainerCard && trainerCard.background && typeof trainerCard.background !== 'string' ?
-				trainerCard.background.secondaryColor as HexCode : undefined,
+			currentPickObject: trainerCard && trainerCard.background && typeof trainerCard.background !== 'string' ?
+				trainerCard.background : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearBackgroundColor(dontRender),
@@ -58,7 +54,7 @@ class GameTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.trainerPicker = new TrainerPicker(room, this.commandPrefix, setTrainerCommand, {
+		this.trainerPicker = new TrainerPicker(this, this.commandPrefix, setTrainerCommand, {
 			currentPick: trainerCard ? trainerCard.avatar : undefined,
 			userId: this.userId,
 			onSetTrainerGen: (index, trainerGen, dontRender) => this.setTrainerGen(dontRender),
@@ -70,7 +66,7 @@ class GameTrainerCard extends HtmlPageBase {
 
 		PokemonPickerBase.loadData();
 
-		this.pokemonPicker = new PokemonTextInput(room, this.commandPrefix, setPokemonCommand, {
+		this.pokemonPicker = new PokemonTextInput(this, this.commandPrefix, setPokemonCommand, {
 			gif: false,
 			currentInput: trainerCard ? trainerCard.pokemon.join(", ") : "",
 			pokemonList: PokemonPickerBase.pokemonGens[Dex.getModelGenerations().slice().pop()!],
@@ -199,7 +195,7 @@ class GameTrainerCard extends HtmlPageBase {
 		if (user) name = user.name;
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Game Trainer Card</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 
 		html += "<br />";
 		const currentCard = Games.getTrainerCardHtml(this.room, name);
@@ -306,7 +302,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new GameTrainerCard(targetRoom, user, maxIcons);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new GameTrainerCard(targetRoom, user, maxIcons);
 
 			if (cmd === chooseBackgroundColorPicker) {
 				pages[user.id].chooseBackgroundColorPicker();
@@ -314,7 +310,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].chooseTrainerPicker();
 			} else if (cmd === choosePokemonPicker) {
 				pages[user.id].choosePokemonPicker();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

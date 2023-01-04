@@ -4,7 +4,7 @@ import type { IDatabase, ITournamentTrainerCard } from "../types/storage";
 import type { User } from "../users";
 import { TrainerPicker } from "./components/trainer-picker";
 import type { ITrainerPick } from "./components/trainer-picker";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 import { FormatTextInput } from "./components/format-text-input";
 import type { IFormat } from "../types/pokemon-showdown";
 import { TrainerCardBadgePicker } from "./components/trainer-card-badge-picker";
@@ -15,7 +15,6 @@ import { PokemonPickerBase } from "./components/pokemon-picker-base";
 import type { PokemonChoices } from "./game-host-control-panel";
 import { NamePicker } from "./components/name-picker";
 import { TrainerCardRibbonPicker } from "./components/trainer-card-ribbon-picker";
-import type { HexCode } from "../types/tools";
 
 const baseCommand = 'tournamenttrainercard';
 const baseCommandAlias = 'ttc';
@@ -42,11 +41,8 @@ const setTableColorCommand = 'settablecolor';
 const setFooterColorCommand = 'setfootercolor';
 const setPokemonCommand = 'setpokemon';
 const setTargetUserIdCommand = 'settargetuserid';
-const closeCommand = 'close';
 
-const pageId = 'tournament-trainer-card';
-
-export const id = pageId;
+export const pageId = 'tournament-trainer-card';
 export const pages: Dict<TournamentTrainerCard> = {};
 
 interface ITournamentTrainerCardOptions {
@@ -54,7 +50,7 @@ interface ITournamentTrainerCardOptions {
 	viewAllMode?: boolean;
 }
 
-class TournamentTrainerCard extends HtmlPageBase {
+export class TournamentTrainerCard extends HtmlPageBase {
 	pageId = pageId;
 
 	currentPicker: 'badges' | 'bio' | 'format' | 'footer' | 'header' | 'pokemon' | 'ribbons' | 'table' | 'trainer' = 'trainer';
@@ -77,12 +73,14 @@ class TournamentTrainerCard extends HtmlPageBase {
 	trainerCardBadgePicker!: TrainerCardBadgePicker;
 	trainerCardRibbonPicker!: TrainerCardRibbonPicker;
 
-	constructor(room: Room, user: User, options?: ITournamentTrainerCardOptions) {
-		super(room, user, baseCommandAlias, pages);
+	constructor(room: Room, user: User, classBaseCommandAlias: string, options?: ITournamentTrainerCardOptions,
+		htmlPages?: Dict<TournamentTrainerCard>) {
+		super(room, user, classBaseCommandAlias, htmlPages || pages);
 
 		this.targetUserId = (options && options.targetUserId) || this.userId;
 		this.viewAllMode = options && options.viewAllMode ? true : false;
 		this.readonly = this.viewAllMode;
+		this.setCloseButton();
 
 		const trainerCardRoom = Tournaments.getTrainerCardRoom(room);
 		if (!trainerCardRoom) throw new Error("No trainer card room for " + room.title);
@@ -100,7 +98,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			this.trainerCardUserIds = [];
 		}
 
-		this.trainerCardUserIdPicker = new NamePicker(room, this.commandPrefix, setTargetUserIdCommand, {
+		this.trainerCardUserIdPicker = new NamePicker(this, this.commandPrefix, setTargetUserIdCommand, {
 			currentPick: this.targetUserId,
 			names: this.trainerCardUserIds,
 			namesHtml: this.trainerCardUserIdNames,
@@ -113,6 +111,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 		this.trainerCardUserIdPicker.active = this.viewAllMode;
 
 		this.loadTournamentTrainerCard();
+		this.setCloseButton({enabledReadonly: true});
 	}
 
 	getDatabase(): IDatabase {
@@ -226,7 +225,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			}
 		}
 
-		this.trainerPicker = new TrainerPicker(this.room, this.commandPrefix, setTrainerCommand, {
+		this.trainerPicker = new TrainerPicker(this, this.commandPrefix, setTrainerCommand, {
 			currentPick: trainerCard ? trainerCard.avatar : undefined,
 			userId: this.targetUserId,
 			onSetTrainerGen: (index, trainerGen, dontRender) => this.setTrainerGen(dontRender),
@@ -241,7 +240,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			format = Dex.getFormat(trainerCard.favoriteFormat);
 		}
 
-		this.formatPicker = new FormatTextInput(this.room, this.commandPrefix, setFormatCommand, {
+		this.formatPicker = new FormatTextInput(this, this.commandPrefix, setFormatCommand, {
 			currentInput: format ? format.name : "",
 			inputWidth: Tools.minRoomWidth,
 			placeholder: "Enter a format",
@@ -253,7 +252,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.trainerCardBadgePicker = new TrainerCardBadgePicker(this.room, this.commandPrefix, setBadgesCommand, {
+		this.trainerCardBadgePicker = new TrainerCardBadgePicker(this, this.commandPrefix, setBadgesCommand, {
 			currentPicks: trainerCard ? trainerCard.badges : undefined,
 			maxPicks: 0,
 			onClear: (index, dontRender) => this.clearBadges(dontRender),
@@ -263,7 +262,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.trainerCardRibbonPicker = new TrainerCardRibbonPicker(this.room, this.commandPrefix, setRibbonsCommand, {
+		this.trainerCardRibbonPicker = new TrainerCardRibbonPicker(this, this.commandPrefix, setRibbonsCommand, {
 			currentPicks: trainerCard ? trainerCard.ribbons : undefined,
 			maxPicks: 0,
 			onClear: (index, dontRender) => this.clearRibbons(dontRender),
@@ -273,7 +272,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.bioInput = new TextInput(this.room, this.commandPrefix, setBioCommand, {
+		this.bioInput = new TextInput(this, this.commandPrefix, setBioCommand, {
 			placeholder: "Enter bio",
 			stripHtmlCharacters: true,
 			onClear: () => this.clearBio(),
@@ -283,12 +282,9 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.headerColorPicker = new ColorPicker(this.room, this.commandPrefix, setHeaderColorCommand, {
+		this.headerColorPicker = new ColorPicker(this, this.commandPrefix, setHeaderColorCommand, {
 			currentPick: trainerCard && typeof trainerCard.header === 'string' ? trainerCard.header : undefined,
-			currentPrimaryColor: trainerCard && trainerCard.header && typeof trainerCard.header !== 'string' ?
-				trainerCard.header.color as HexCode : undefined,
-			currentSecondaryColor: trainerCard && trainerCard.header && typeof trainerCard.header !== 'string' ?
-				trainerCard.header.secondaryColor as HexCode : undefined,
+			currentPickObject: trainerCard && trainerCard.header && typeof trainerCard.header !== 'string' ? trainerCard.header : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickHeaderHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickHeaderLightness(dontRender),
 			onClear: (index, dontRender) => this.clearHeaderColor(dontRender),
@@ -297,12 +293,9 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.tableColorPicker = new ColorPicker(this.room, this.commandPrefix, setTableColorCommand, {
+		this.tableColorPicker = new ColorPicker(this, this.commandPrefix, setTableColorCommand, {
 			currentPick: trainerCard && typeof trainerCard.table === 'string' ? trainerCard.table : undefined,
-			currentPrimaryColor: trainerCard && trainerCard.table && typeof trainerCard.table !== 'string' ?
-				trainerCard.table.color as HexCode : undefined,
-			currentSecondaryColor: trainerCard && trainerCard.table && typeof trainerCard.table !== 'string' ?
-				trainerCard.table.secondaryColor as HexCode : undefined,
+			currentPickObject: trainerCard && trainerCard.table && typeof trainerCard.table !== 'string' ? trainerCard.table : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickTableHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickTableLightness(dontRender),
 			onClear: (index, dontRender) => this.clearTableColor(dontRender),
@@ -311,12 +304,9 @@ class TournamentTrainerCard extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.footerColorPicker = new ColorPicker(this.room, this.commandPrefix, setFooterColorCommand, {
+		this.footerColorPicker = new ColorPicker(this, this.commandPrefix, setFooterColorCommand, {
 			currentPick: trainerCard && typeof trainerCard.footer === 'string' ? trainerCard.footer : undefined,
-			currentPrimaryColor: trainerCard && trainerCard.footer && typeof trainerCard.footer !== 'string' ?
-				trainerCard.footer.color as HexCode : undefined,
-			currentSecondaryColor: trainerCard && trainerCard.footer && typeof trainerCard.footer !== 'string' ?
-				trainerCard.footer.secondaryColor as HexCode : undefined,
+			currentPickObject: trainerCard && trainerCard.footer && typeof trainerCard.footer !== 'string' ? trainerCard.footer : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickFooterHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickFooterLightness(dontRender),
 			onClear: (index, dontRender) => this.clearFooterColor(dontRender),
@@ -327,7 +317,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 
 		PokemonPickerBase.loadData();
 
-		this.pokemonPicker = new PokemonTextInput(this.room, this.commandPrefix, setPokemonCommand, {
+		this.pokemonPicker = new PokemonTextInput(this, this.commandPrefix, setPokemonCommand, {
 			gif: false,
 			currentInput: trainerCard && trainerCard.pokemon ? trainerCard.pokemon.join(", ") : "",
 			pokemonList: PokemonPickerBase.pokemonGens[Dex.getModelGenerations().slice().pop()!],
@@ -563,7 +553,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Tournament Trainer " +
 			"Card</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close", {enabledReadonly: true});
+		html += "&nbsp;" + this.closeButtonHtml;
 
 		html += "<br />";
 		const currentCard = name ? Tournaments.getTrainerCardHtml(this.room, name) : "";
@@ -608,6 +598,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			{selectedAndDisabled: format, enabledReadonly: true});
 		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + choosePokemonView, "Pokemon",
 			{selectedAndDisabled: pokemon, enabledReadonly: true});
+
 		if (this.isRoomStaff) {
 			html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + chooseBadgesView, "Badges",
 				{selectedAndDisabled: badges, enabledReadonly: true});
@@ -616,6 +607,7 @@ class TournamentTrainerCard extends HtmlPageBase {
 			html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + chooseBioView, "Bio",
 				{selectedAndDisabled: bio, enabledReadonly: true});
 		}
+
 		html += "<br /><br />";
 
 		if (trainer) {
@@ -665,12 +657,12 @@ export const commands: BaseCommandDefinitions = {
 			targets.shift();
 
 			if (!cmd) {
-				new TournamentTrainerCard(targetRoom, user).open();
+				new TournamentTrainerCard(targetRoom, user, baseCommandAlias).open();
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand && cmd !== viewAllCommand && cmd !== staffEditCommand) {
-				new TournamentTrainerCard(targetRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND && cmd !== viewAllCommand && cmd !== staffEditCommand) {
+				new TournamentTrainerCard(targetRoom, user, baseCommandAlias);
 			}
 
 			if (cmd === chooseTrainerPicker) {
@@ -694,7 +686,7 @@ export const commands: BaseCommandDefinitions = {
 			} else if (cmd === chooseBioView) {
 				if (!user.hasRank(targetRoom, 'driver') && !user.isDeveloper()) return;
 				pages[user.id].chooseBioView();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else if (cmd === viewAllCommand) {
 				let targetUserId;
@@ -703,13 +695,13 @@ export const commands: BaseCommandDefinitions = {
 					targetUserId = possibleUserId;
 				}
 
-				new TournamentTrainerCard(targetRoom, user, {targetUserId, viewAllMode: true}).open();
+				new TournamentTrainerCard(targetRoom, user, baseCommandAlias, {targetUserId, viewAllMode: true}).open();
 			} else if (cmd === staffEditCommand) {
 				if (!user.hasRank(targetRoom, 'driver') && !user.isDeveloper()) return;
 
 				const targetUserId = Tools.toId(targets[0]);
 				if (!Tools.isUsernameLength(targetUserId)) return this.say(CommandParser.getErrorText(['invalidUsernameLength']));
-				new TournamentTrainerCard(targetRoom, user, {targetUserId}).open();
+				new TournamentTrainerCard(targetRoom, user, baseCommandAlias, {targetUserId}).open();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);
 				if (error) this.say(error);

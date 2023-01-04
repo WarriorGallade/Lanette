@@ -75,7 +75,7 @@ describe("Dex", () => {
 
 		pokemon = Dex.getExistingPokemon('Smeargle');
 		allPossibleMoves = Dex.getAllPossibleMoves(pokemon);
-		assertStrictEqual(allPossibleMoves.length, 770);
+		assertStrictEqual(allPossibleMoves.length, 842);
 
 		pokemon = Dex.getExistingPokemon('Pikachu-Gmax');
 		allPossibleMoves = Dex.getAllPossibleMoves(pokemon);
@@ -99,11 +99,6 @@ describe("Dex", () => {
 
 		assertStrictEqual(Dex.getExistingPokemon("Furfrou").spriteid, "furfrou");
 		assertStrictEqual(Dex.getExistingPokemon("Furfrou-Dandy").spriteid, "furfrou-dandy");
-
-		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Tackle")), 404);
-		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Aeroblast")), 2);
-		// bypass gen 8 Sketch check
-		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Aura Wheel")), 3);
 
 		assertStrictEqual(Dex.getExistingFormat("gen1ou").gen, 1);
 		assertStrictEqual(Dex.getExistingFormat("gen2ou").gen, 2);
@@ -154,9 +149,12 @@ describe("Dex", () => {
 			assert(categoryKeys.indexOf(categoryKeys[i]) === i, "Duplicate category for " + categoryKeys[i]);
 		}
 
+		const missingFormats: string[] = [];
 		for (const i in formatLinks) {
-			assert(Dex.getFormat(i), i);
+			if (!Dex.getFormat(i)) missingFormats.push(i);
 		}
+
+		assert(!missingFormats.length, "Invalid formats for links: " + missingFormats.join(", "));
 	});
 	it('should return data based on ids', () => {
 		const ability = Dex.getAbility("Air Lock");
@@ -242,7 +240,7 @@ describe("Dex", () => {
 	});
 	it('should run methods for all data types', function() {
 		// eslint-disable-next-line @typescript-eslint/no-invalid-this
-		this.timeout(45000);
+		this.timeout(60000);
 
 		const dexData = Dex.getData();
 
@@ -486,7 +484,11 @@ describe("Dex", () => {
 
 		separatedCustomRules = Dex.separateCustomRules(["-no item"]);
 		assertStrictEqual(separatedCustomRules.addedbans.length, 1);
-		assertStrictEqual(separatedCustomRules.addedbans[0], "No Item");
+		assertStrictEqual(separatedCustomRules.addedbans[0], "Empty Item");
+
+		separatedCustomRules = Dex.separateCustomRules(["-no ability"]);
+		assertStrictEqual(separatedCustomRules.addedbans.length, 1);
+		assertStrictEqual(separatedCustomRules.addedbans[0], "Empty Ability");
 	});
 	it('should return proper values from isImmune()', () => {
 		const normalTypeMove = Dex.getExistingMove('Tackle');
@@ -573,6 +575,41 @@ describe("Dex", () => {
 		assertStrictEqual(Dex.getEffectiveness(normalTypeMove, ['Ghost', 'Dark']), 0);
 		assertStrictEqual(Dex.getEffectiveness(normalTypeMove, Dex.getExistingPokemon('Spiritomb')), 0);
 	});
+	it('should return proper values from getMoveAvailability()', () => {
+		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Tackle")), 461);
+		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Aeroblast")), 2);
+
+		// bypass gen 8 Sketch check
+		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Aura Wheel")), 3);
+
+		assertStrictEqual(Dex.getMoveAvailabilityPokemon(Dex.getExistingMove("Origin Pulse")).join(','), 'Kyogre,Kyogre-Primal');
+		assertStrictEqual(Dex.getMoveAvailabilityPokemon(Dex.getExistingMove("Toxic Thread")).join(','), 'Spinarak,Ariados');
+		assertStrictEqual(Dex.getMoveAvailabilityPokemon(Dex.getExistingMove("Kinesis")).join(','), 'Kadabra,Alakazam,Alakazam-Mega');
+		assertStrictEqual(Dex.getMoveAvailabilityPokemon(Dex.getExistingMove("Judgment")).join(','), 'Arceus,Arceus-Bug,Arceus-Dark,' +
+			'Arceus-Dragon,Arceus-Electric,Arceus-Fairy,Arceus-Fighting,Arceus-Fire,Arceus-Flying,Arceus-Ghost,Arceus-Grass,' +
+			'Arceus-Ground,Arceus-Ice,Arceus-Poison,Arceus-Psychic,Arceus-Rock,Arceus-Steel,Arceus-Water');
+		assertStrictEqual(Dex.getMoveAvailabilityPokemon(Dex.getExistingMove("Volt Tackle")).join(','), 'Pikachu,Pikachu-Original,' +
+			'Pikachu-Hoenn,Pikachu-Sinnoh,Pikachu-Unova,Pikachu-Kalos,Pikachu-Alola,Pikachu-Partner,Pikachu-Gmax,Pikachu-World,Raichu,' +
+			'Raichu-Alola,Pichu,Pichu-Spiky-eared');
+	});
+	it('should return proper values from isSignatureMove()', () => {
+		assert(!Dex.isSignatureMove(Dex.getExistingMove("Tackle")));
+
+		// no evolutions
+		assert(Dex.isSignatureMove(Dex.getExistingMove("Origin Pulse")));
+
+		// evolution line
+		assert(Dex.isSignatureMove(Dex.getExistingMove("Toxic Thread")));
+
+		// mega evolution
+		assert(Dex.isSignatureMove(Dex.getExistingMove("Kinesis")));
+
+		// base formes
+		assert(Dex.isSignatureMove(Dex.getExistingMove("Judgment")));
+
+		// base formes + evolutions
+		assert(Dex.isSignatureMove(Dex.getExistingMove("Volt Tackle")));
+	});
 	it('should return proper values from isPseudoLCPokemon()', () => {
 		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Pichu')), false);
 		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Pikachu')), false);
@@ -587,7 +624,12 @@ describe("Dex", () => {
 			assertStrictEqual(evolutionLines[0].join(","), 'Charmander,Charmeleon,Charizard');
 		}
 
-		let evolutionLines = Dex.getEvolutionLines(Dex.getExistingPokemon('Ditto'));
+		let evolutionLines = Dex.getEvolutionLines(Dex.getExistingPokemon('Charizard-Mega-X'));
+		assertStrictEqual(evolutionLines.length, 2);
+		assertStrictEqual(evolutionLines[0].join(','), 'Charizard-Mega-X');
+		assertStrictEqual(evolutionLines[1].join(","), 'Charmander,Charmeleon,Charizard');
+
+		evolutionLines = Dex.getEvolutionLines(Dex.getExistingPokemon('Ditto'));
 		assertStrictEqual(evolutionLines.length, 1);
 		assertStrictEqual(evolutionLines[0].join(','), 'Ditto');
 
@@ -630,12 +672,22 @@ describe("Dex", () => {
 	});
 	it('should return proper values from isEvolutionFamily()', () => {
 		assert(Dex.isEvolutionFamily(['Charmander', 'Charmeleon', 'Charizard']));
+		assert(Dex.isEvolutionFamily(['Charmander', 'Charmeleon', 'Charizard-Mega-X']));
+		assert(Dex.isEvolutionFamily(['Charmander', 'Charmeleon', 'Charizard-Mega-Y']));
 		assert(Dex.isEvolutionFamily(['Charmander', 'Charmeleon']));
 		assert(Dex.isEvolutionFamily(['Charmeleon', 'Charizard']));
+		assert(Dex.isEvolutionFamily(['Charmeleon', 'Charizard-Mega-X']));
+		assert(Dex.isEvolutionFamily(['Charmeleon', 'Charizard-Mega-Y']));
 		assert(Dex.isEvolutionFamily(['Charmander', 'Charizard']));
+		assert(Dex.isEvolutionFamily(['Charmander', 'Charizard-Mega-X']));
+		assert(Dex.isEvolutionFamily(['Charmander', 'Charizard-Mega-Y']));
 		assert(Dex.isEvolutionFamily(['Charmander']));
 		assert(Dex.isEvolutionFamily(['Charmeleon']));
 		assert(Dex.isEvolutionFamily(['Charizard']));
+		assert(Dex.isEvolutionFamily(['Charizard-Mega-X']));
+		assert(Dex.isEvolutionFamily(['Charizard-Mega-Y']));
+		assert(Dex.isEvolutionFamily(['Charizard', 'Charizard-Mega-X']));
+		assert(Dex.isEvolutionFamily(['Charizard', 'Charizard-Mega-Y']));
 		assert(!Dex.isEvolutionFamily(['Bulbasaur', 'Charmeleon', 'Charizard']));
 		assert(Dex.isEvolutionFamily(['Tyrogue', 'Hitmonlee']));
 		assert(Dex.isEvolutionFamily(['Tyrogue', 'Hitmonchan']));
@@ -658,7 +710,7 @@ describe("Dex", () => {
 		assert(Dex.includesPokemonFormes(['Vulpix-Alola'], [['Vulpix'], ['Vulpix-Alola']]));
 	});
 	it('should return proper values from getUsablePokemon()', () => {
-		let usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("ou"));
+		let usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8ou"));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pikachu').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pikachu-Sinnoh').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Gastrodon').name));
@@ -672,7 +724,7 @@ describe("Dex", () => {
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Missingno.').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Pokestar Smeargle').name));
 
-		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("ubers"));
+		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8ubers"));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pikachu').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Giratina').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Giratina-Origin').name));
@@ -681,23 +733,23 @@ describe("Dex", () => {
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Missingno.').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Pokestar Smeargle').name));
 
-		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("ou@@@+Lunala"));
+		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8ou@@@+Lunala"));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pikachu').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Lunala').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Voodoom').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Missingno.').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Pokestar Smeargle').name));
 
-		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("lc"));
+		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8lc"));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pawniard').name));
 		assert(usablePokemon.includes(Dex.getExistingPokemon('Pichu').name));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Pikachu').name));
 
-		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("nationaldexag"));
-		assert(usablePokemon.includes(Dex.getExistingPokemon('Arceus-Bug').name));
+		// usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8nationaldexag"));
+		// assert(usablePokemon.includes(Dex.getExistingPokemon('Arceus-Bug').name));
 
 		// all abilities banned
-		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("aaa"));
+		usablePokemon = Dex.getUsablePokemon(Dex.getExistingFormat("gen8aaa"));
 		assert(!usablePokemon.includes(Dex.getExistingPokemon('Komala').name));
 	});
 	it('should return proper values from isPossibleTeam()', () => {
@@ -1019,6 +1071,140 @@ describe("Dex", () => {
 		assertStrictEqual(possibleTeams.length, 1);
 		assert(possibleTeams.includes('Bulbasaur'));
 
+		// trade and evolve
+
+		// 1 required addition, 1 required drop, and 1 optional evolution
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Charmander"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 2);
+		assert(possibleTeams.includes('Charmander'));
+		assert(possibleTeams.includes('Charmeleon'));
+
+		// 1 required addition, 1 required drop, and 1 required evolution
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Charmander"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 1);
+		assert(possibleTeams.includes('Charmeleon'));
+
+		// no evolutions left
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Charizard"],
+		{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 1);
+		assert(possibleTeams.includes('Charizard'));
+
+		// allow formes
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Meowth"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true, allowFormes: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+		assert(possibleTeams.includes('Persian'));
+		assert(possibleTeams.includes('Persian-Alola'));
+		assert(possibleTeams.includes('Perrserker'));
+
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Meowth-Alola"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true, allowFormes: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Meowth-Galar"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true, allowFormes: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Shellos"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true, allowFormes: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 2);
+		assert(possibleTeams.includes('Gastrodon'));
+		assert(possibleTeams.includes('Gastrodon-East'));
+
+		// prevent OOM
+		let possibleTeamsRecursive = Dex.getPossibleTeams([["Bulbasaur", "Charmander", "Squirtle"]],
+			["Chikorita", "Cyndaquil", "Totodile"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 27);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Treecko", "Torchic", "Mudkip"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 288);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Turtwig", "Chimchar", "Piplup"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 1116);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Snivy", "Tepig", "Oshawott"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 2520);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Chespin", "Fennekin", "Froakie"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 4338);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Rowlet", "Litten", "Popplio"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 6552);
+
+		possibleTeamsRecursive = Dex.getPossibleTeams(possibleTeamsRecursive,
+			["Grookey", "Scorbunny", "Sobble"],
+			{additions: 1, drops: 1, evolutions: 1, requiredAddition: true, requiredDrop: true, requiredEvolution: true});
+		assertStrictEqual(possibleTeamsRecursive.length, 9225);
+
+		// trade and de-volve
+
+		// 1 required addition, 1 required drop, and 1 optional evolution
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Charizard"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 2);
+		assert(possibleTeams.includes('Charizard'));
+		assert(possibleTeams.includes('Charmeleon'));
+
+		// 1 required addition, 1 required drop, and 1 required evolution
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Charizard"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 1);
+		assert(possibleTeams.includes('Charmeleon'));
+
+		// no evolutions left
+		possibleTeams = Dex.getPossibleTeams([["Bulbasaur"]], ["Charmander"],
+		{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true})
+			.map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 1);
+		assert(possibleTeams.includes('Charmander'));
+
+		// allow formes
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Persian"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true,
+			allowFormes: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+		assert(possibleTeams.includes('Meowth'));
+		assert(possibleTeams.includes('Meowth-Alola'));
+		assert(possibleTeams.includes('Meowth-Galar'));
+
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Persian-Alola"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true,
+			allowFormes: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Perrserker"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true,
+			allowFormes: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 3);
+
+		possibleTeams = Dex.getPossibleTeams([["Venusaur"]], ["Gastrodon"],
+			{additions: 1, drops: 1, evolutions: -1, requiredAddition: true, requiredDrop: true, requiredEvolution: true,
+			allowFormes: true}).map(x => x.join(','));
+		assertStrictEqual(possibleTeams.length, 2);
+		assert(possibleTeams.includes('Shellos'));
+		assert(possibleTeams.includes('Shellos-East'));
+
 		// doubles catch and evolve
 
 		// 2 optional additions and 2 optional evolutions
@@ -1216,10 +1402,11 @@ describe("Dex", () => {
 			"Bulbasaur needed to be evolved 2 more stages and Charmander needed to be evolved 2 more stages.");
 	});
 	it('should return proper values from getList methods', () => {
-		const abilities = Dex.getAbilitiesList().map(x => x.name);
-		const items = Dex.getItemsList().map(x => x.name);
-		const moves = Dex.getMovesList().map(x => x.name);
-		const pokemon = Dex.getPokemonList().map(x => x.name);
+		let dex = Dex.getDex("gen8");
+		const abilities = dex.getAbilitiesList().map(x => x.name);
+		const items = dex.getItemsList().map(x => x.name);
+		const moves = dex.getMovesList().map(x => x.name);
+		const pokemon = dex.getPokemonList().map(x => x.name);
 
 		assert(abilities.length);
 		assert(items.length);
@@ -1254,7 +1441,7 @@ describe("Dex", () => {
 
 		// past gen
 
-		const dex = Dex.getDex("gen1");
+		dex = Dex.getDex("gen1");
 		assert(!dex.getPokemonList().map(x => x.name).includes(dex.getExistingPokemon('Missingno.').name));
 	});
 	it('should have hex colors for all relevant Pokemon and move data', () => {

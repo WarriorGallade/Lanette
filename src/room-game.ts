@@ -79,7 +79,15 @@ export abstract class Game extends Activity {
 		}
 	}
 
-	exceedsMessageSizeLimit(message: string): boolean {
+	exceedsMessageSizeLimit(message: string, html?: boolean, uhtmlName?: string): boolean {
+		if (html) {
+			if (uhtmlName) {
+				message = "/adduhtml " + uhtmlName + ", " + message;
+			} else {
+				message = "/addhtmlbox " + message;
+			}
+		}
+
 		return Client.exceedsMessageSizeLimit(this.room.getMessageWithClientPrefix(message));
 	}
 
@@ -292,7 +300,7 @@ export abstract class Game extends Activity {
 			}
 
 			if (this.hasAssistActions) {
-				html += "<br /><br />Your assist actions will be " + (assistActions ? "displayed " : "hidden") + "!&nbsp;" +
+				html += "<br /><br />Your assist actions will be " + (assistActions ? "displayed" : "hidden") + "!&nbsp;" +
 					Client.getQuietPmButton(this.room as Room, Config.commandCharacter + "setscriptedgameoption " + this.room.id +
 					", assistactions," + (assistActions ? "off" : "on"), (assistActions ? "Hide" : "Display") + " assist actions",
 					false, buttonStyle);

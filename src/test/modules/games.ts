@@ -5,7 +5,7 @@ import { PRNG } from '../../lib/prng';
 import type { ScriptedGame } from '../../room-game-scripted';
 import type { GameFileTests, IGameFormat, IGameTestAttributes, IUserHostedFormat } from '../../types/games';
 import type { IPastGame } from '../../types/storage';
-import { assert, assertClientSendQueue, assertStrictEqual, createTestRoom, runCommand, testOptions } from '../test-tools';
+import { addPlayers, assert, assertClientSendQueue, assertStrictEqual, createTestRoom, runCommand, testOptions } from '../test-tools';
 
 /* eslint-env mocha */
 
@@ -20,7 +20,9 @@ if (testOptions.games) {
 	}
 } else {
 	for (const i in Games.getFormats()) {
-		formatsToTest.push(Games.getExistingFormat(i));
+		const format = Games.getExistingFormat(i);
+		if (format.disabled) continue;
+		formatsToTest.push(format);
 	}
 }
 
@@ -69,7 +71,6 @@ function createIndividualTests(format: IGameFormat, tests: GameFileTests): void 
 			const attributes: IGameTestAttributes = {};
 			if (commands) attributes.commands = commands[i];
 			if (testConfig.async) {
-				// eslint-disable-next-line @typescript-eslint/no-misused-promises
 				it(test, async function(this: Mocha.Context) {
 					const game = createIndividualTestGame(testFormat);
 					const roomid = game.room.id;
@@ -228,7 +229,10 @@ describe("Games", () => {
 		}
 	});
 
-	it('should create games properly', () => {
+	it('should create games properly', function() {
+		// eslint-disable-next-line @typescript-eslint/no-invalid-this
+		this.timeout(5000);
+
 		for (const format of formatsToTest) {
 			const room = createTestRoom();
 			try {
@@ -267,23 +271,41 @@ describe("Games", () => {
 		}
 	});
 
-	it('should properly deallocate games', () => {
+	it('should properly deallocate games', function() {
+		// eslint-disable-next-line @typescript-eslint/no-invalid-this
+		this.timeout(10000);
+
 		const room = createTestRoom();
-		Games.createGame(room, Games.getExistingFormat('trivia'));
-		assert(room.game);
-		room.game.on("text", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
-		room.game.onHtml("html", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
-		room.game.onUhtml("uhtml-base-name", "html", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+		for (const format of formatsToTest) {
+			const game = Games.createGame(room, format);
+			assert(game);
+			assert(room.game === game);
+			assert(!game.ended);
 
-		assertStrictEqual(Object.keys(room.messageListeners).length, 1);
-		assertStrictEqual(Object.keys(room.htmlMessageListeners).length, 1);
-		assertStrictEqual(Object.keys(room.uhtmlMessageListeners).length, 1);
+			if (!format.freejoin && !game.managedPlayers && !game.usesTournamentJoin) {
+				game.signups();
+				const players = addPlayers(game, game.maxPlayers);
+				if (!game.started) game.start();
 
-		room.game.deallocate(true);
+				game.removePlayer(players[0].name);
+			}
 
-		assertStrictEqual(Object.keys(room.messageListeners).length, 0);
-		assertStrictEqual(Object.keys(room.htmlMessageListeners).length, 0);
-		assertStrictEqual(Object.keys(room.uhtmlMessageListeners).length, 0);
+			game.on("text", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+			game.onHtml("html", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+			game.onUhtml("uhtml-base-name", "html", () => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+
+			assert(Object.keys(room.messageListeners).length >= 1);
+			assert(Object.keys(room.htmlMessageListeners).length >= 1);
+			assert(Object.keys(room.uhtmlMessageListeners).length >= 1);
+
+			game.deallocate(true);
+			assert(!room.game);
+			assert(game.ended);
+
+			assertStrictEqual(Object.keys(room.messageListeners).length, 0);
+			assertStrictEqual(Object.keys(room.htmlMessageListeners).length, 0);
+			assertStrictEqual(Object.keys(room.uhtmlMessageListeners).length, 0);
+		}
 
 		Rooms.remove(room);
 	});
@@ -339,7 +361,10 @@ describe("Games", () => {
 		runCommand("rhint", "trivia", Users.self, Users.self);
 	});
 
-	it('should support setting the initial PRNG seed', () => {
+	it('should support setting the initial PRNG seed', function() {
+		// eslint-disable-next-line @typescript-eslint/no-invalid-this
+		this.timeout(10000);
+
 		const room = createTestRoom();
 		const prng = new PRNG();
 		for (const format of formatsToTest) {
@@ -626,10 +651,10 @@ describe("Games", () => {
 		Rooms.remove(room);
 	});
 	it('should return proper values from getList methods', () => {
-		const abilities = Games.getAbilitiesList().map(x => x.name);
-		const items = Games.getItemsList().map(x => x.name);
-		const moves = Games.getMovesList().map(x => x.name);
-		const pokemon = Games.getPokemonList().map(x => x.name);
+		const abilities = Games.getAbilitiesList(undefined, 8).map(x => x.name);
+		const items = Games.getItemsList(undefined, 8).map(x => x.name);
+		const moves = Games.getMovesList(undefined, 8).map(x => x.name);
+		const pokemon = Games.getPokemonList({gen: 8}).map(x => x.name);
 
 		assert(abilities.length);
 		assert(items.length);
@@ -638,12 +663,11 @@ describe("Games", () => {
 
 		assert(!abilities.includes(Dex.getExistingAbility('No Ability').name));
 
-		// LGPE/CAP/Glitch/Pokestar
+		// CAP/Glitch/Pokestar
 		assert(!abilities.includes(Dex.getExistingAbility('Mountaineer').name));
 		assert(!items.includes(Dex.getExistingItem('Crucibellite').name));
 		assert(!moves.includes(Dex.getExistingMove('Baddy Bad').name));
 		assert(!moves.includes(Dex.getExistingMove('Paleo Wave').name));
-		assert(!pokemon.includes(Dex.getExistingPokemon('Pikachu-Starter').name));
 		assert(!pokemon.includes(Dex.getExistingPokemon('Voodoom').name));
 		assert(!pokemon.includes(Dex.getExistingPokemon('Missingno.').name));
 		assert(!pokemon.includes(Dex.getExistingPokemon('Pokestar Smeargle').name));

@@ -1,4 +1,4 @@
-import type { Room } from "../../rooms";
+import type { HtmlPageBase } from "../html-page-base";
 import type { IComponentProps } from "./component-base";
 import { ComponentBase } from "./component-base";
 
@@ -30,8 +30,8 @@ export class Pagination extends ComponentBase<IPaginationProps> {
 	pagesLabel: string;
 	totalPages!: number;
 
-	constructor(room: Room, parentCommandPrefix: string, componentCommand: string, props: IPaginationProps) {
-		super(room, parentCommandPrefix, componentCommand, props);
+	constructor(htmlPage: HtmlPageBase, parentCommandPrefix: string, componentCommand: string, props: IPaginationProps) {
+		super(htmlPage, parentCommandPrefix, componentCommand, props);
 
 		this.currentPage = props.currentPage || 0;
 		this.elementsIncrement = props.elementsPerRow * props.rowsPerPage;
@@ -59,12 +59,12 @@ export class Pagination extends ComponentBase<IPaginationProps> {
 		this.selectPage(page, true);
 	}
 
-	updateElements(elements: IPageElement[], onOpen?: boolean): void {
+	updateElements(elements: IPageElement[], dontRender?: boolean): void {
 		this.elements = elements;
 		this.totalPages = Math.ceil(elements.length / this.elementsIncrement);
 		this.autoSelectPage();
 
-		if (!onOpen) this.props.onSelectPage(this.currentPage);
+		if (!dontRender) this.props.onSelectPage(this.currentPage);
 	}
 
 	tryCommand(originalTargets: readonly string[]): string | undefined {

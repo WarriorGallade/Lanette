@@ -3,9 +3,7 @@
 		"target": "esnext",
 		"strict": true,
 		"incremental": true,
-		"outDir": "build",
-		"sourceMap": true,
-		"noEmitOnError": true,
+		"noEmit": true,
 		"module": "commonjs",
 		"moduleResolution": "node",
 		"importsNotUsedAsValues": "error",
@@ -13,6 +11,7 @@
 		    "node_modules/@types"
 		],
 		"types": [
+			"eslint",
 			"mocha",
 		    "node",
 		    "ws"
@@ -22,6 +21,8 @@
 		]
 	},
 	"include": [
+		"*.ts",
+		"private/**/*.ts",
 		"src/**/*.ts"
 	]
 }

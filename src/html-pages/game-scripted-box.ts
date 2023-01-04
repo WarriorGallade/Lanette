@@ -3,7 +3,7 @@ import type { BaseCommandDefinitions } from "../types/command-parser";
 import type { ModelGeneration } from "../types/dex";
 import type { IPokemon } from "../types/pokemon-showdown";
 import type { IDatabase, IGameScriptedBox } from "../types/storage";
-import type { BorderType, HexCode } from "../types/tools";
+import type { BorderType } from "../types/tools";
 import type { User } from "../users";
 import { BorderStyle } from "./components/border-style";
 import type { IColorPick } from "./components/color-picker";
@@ -12,7 +12,7 @@ import { GameTextInput } from "./components/game-text-input";
 import { PokemonPickerBase } from "./components/pokemon-picker-base";
 import { PokemonTextInput } from "./components/pokemon-text-input";
 import type { PokemonChoices } from "./game-host-control-panel";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 
 type BorderPickers = 'background' | 'buttons' | 'signups-background' | 'signups-buttons' | 'game-background' | 'game-buttons';
 type BorderDatabaseKeys = 'backgroundBorder' | 'buttonsBorder' | 'signupsBackgroundBorder' | 'signupsButtonsBorder' |
@@ -55,11 +55,8 @@ const setSignupsBackgroudBorderStyleCommand = 'setsignupsbackgroundborderstyle';
 const setSignupsButtonBorderStyleCommand = 'setsignupsbuttonborderstyle';
 const setGameBackgroudBorderStyleCommand = 'setgamebackgroundborderstyle';
 const setGameButtonBorderStyleCommand = 'setgamebuttonborderstyle';
-const closeCommand = 'close';
 
-const pageId = 'game-scripted-box';
-
-export const id = pageId;
+export const pageId = 'game-scripted-box';
 export const pages: Dict<GameScriptedBox> = {};
 
 class GameScriptedBox extends HtmlPageBase {
@@ -95,13 +92,14 @@ class GameScriptedBox extends HtmlPageBase {
 
 		this.pokemonAvatar = pokemonAvatar;
 		this.currentPicker = pokemonAvatar ? 'pokemon-avatar' : 'background';
+		this.setCloseButton();
 
 		const database = this.getDatabase();
 
 		let previewFormat = "";
 		if (database.gameScriptedBoxes![this.userId].previewFormat) {
 			const format = Games.getFormat(database.gameScriptedBoxes![this.userId].previewFormat!);
-			if (!Array.isArray(format)) previewFormat = format.id;
+			if (!Array.isArray(format) && format.id in database.gameFormatScriptedBoxes![this.userId]) previewFormat = format.id;
 		}
 
 		this.activeGameFormat = previewFormat;
@@ -109,7 +107,7 @@ class GameScriptedBox extends HtmlPageBase {
 		this.lastUsedGameFormat = previewFormat;
 		this.lastCopiedGameFormat = previewFormat;
 
-		this.gameTextInput = new GameTextInput(this.room, this.commandPrefix, setGameFormatCommand, {
+		this.gameTextInput = new GameTextInput(this, this.commandPrefix, setGameFormatCommand, {
 			currentInput: previewFormat ? Games.getExistingFormat(previewFormat).name : "",
 			allowModes: false,
 			allowVariants: false,
@@ -127,12 +125,10 @@ class GameScriptedBox extends HtmlPageBase {
 		const gameScriptedBox = this.getScriptedBox();
 		const currentGamePokemonAvatar = database.gameScriptedBoxes![this.userId].pokemonAvatar;
 
-		this.backgroundColorPicker = new ColorPicker(this.room, this.commandPrefix, setBackgroundColorCommand, {
+		this.backgroundColorPicker = new ColorPicker(this, this.commandPrefix, setBackgroundColorCommand, {
 			currentPick: typeof gameScriptedBox.background === 'string' ? gameScriptedBox.background : undefined,
-			currentPrimaryColor: gameScriptedBox.background && typeof gameScriptedBox.background !== 'string' ?
-				gameScriptedBox.background.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.background && typeof gameScriptedBox.background !== 'string' ?
-				gameScriptedBox.background.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.background && typeof gameScriptedBox.background !== 'string' ?
+				gameScriptedBox.background : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearBackgroundColor(dontRender),
@@ -140,12 +136,10 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.buttonColorPicker = new ColorPicker(this.room, this.commandPrefix, setButtonColorCommand, {
+		this.buttonColorPicker = new ColorPicker(this, this.commandPrefix, setButtonColorCommand, {
 			currentPick: typeof gameScriptedBox.buttons === 'string' ? gameScriptedBox.buttons : undefined,
-			currentPrimaryColor: gameScriptedBox.buttons && typeof gameScriptedBox.buttons !== 'string' ?
-				gameScriptedBox.buttons.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.buttons && typeof gameScriptedBox.buttons !== 'string' ?
-				gameScriptedBox.buttons.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.buttons && typeof gameScriptedBox.buttons !== 'string' ?
+				gameScriptedBox.buttons : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickButtonHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickButtonLightness(dontRender),
 			onClear: (index, dontRender) => this.clearButtonsColor(dontRender),
@@ -153,12 +147,10 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsBackgroundColorPicker = new ColorPicker(this.room, this.commandPrefix, setSignupsBackgroundColorCommand, {
+		this.signupsBackgroundColorPicker = new ColorPicker(this, this.commandPrefix, setSignupsBackgroundColorCommand, {
 			currentPick: typeof gameScriptedBox.signupsBackground === 'string' ? gameScriptedBox.signupsBackground : undefined,
-			currentPrimaryColor: gameScriptedBox.signupsBackground && typeof gameScriptedBox.signupsBackground !== 'string' ?
-				gameScriptedBox.signupsBackground.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.signupsBackground && typeof gameScriptedBox.signupsBackground !== 'string' ?
-				gameScriptedBox.signupsBackground.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.signupsBackground && typeof gameScriptedBox.signupsBackground !== 'string' ?
+				gameScriptedBox.signupsBackground : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearSignupsBackgroundColor(dontRender),
@@ -166,12 +158,10 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsButtonColorPicker = new ColorPicker(this.room, this.commandPrefix, setSignupsButtonColorCommand, {
+		this.signupsButtonColorPicker = new ColorPicker(this, this.commandPrefix, setSignupsButtonColorCommand, {
 			currentPick: typeof gameScriptedBox.signupsButtons === 'string' ? gameScriptedBox.signupsButtons : undefined,
-			currentPrimaryColor: gameScriptedBox.signupsButtons && typeof gameScriptedBox.signupsButtons !== 'string' ?
-				gameScriptedBox.signupsButtons.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.signupsButtons && typeof gameScriptedBox.signupsButtons !== 'string' ?
-				gameScriptedBox.signupsButtons.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.signupsButtons && typeof gameScriptedBox.signupsButtons !== 'string' ?
+				gameScriptedBox.signupsButtons : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickButtonHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickButtonLightness(dontRender),
 			onClear: (index, dontRender) => this.clearSignupsButtonsColor(dontRender),
@@ -179,12 +169,10 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.gameBackgroundColorPicker = new ColorPicker(this.room, this.commandPrefix, setGameBackgroundColorCommand, {
+		this.gameBackgroundColorPicker = new ColorPicker(this, this.commandPrefix, setGameBackgroundColorCommand, {
 			currentPick: typeof gameScriptedBox.gameBackground === 'string' ? gameScriptedBox.gameBackground : undefined,
-			currentPrimaryColor: gameScriptedBox.gameBackground && typeof gameScriptedBox.gameBackground !== 'string' ?
-				gameScriptedBox.gameBackground.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.gameBackground && typeof gameScriptedBox.gameBackground !== 'string' ?
-				gameScriptedBox.gameBackground.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.gameBackground && typeof gameScriptedBox.gameBackground !== 'string' ?
+				gameScriptedBox.gameBackground : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearGameBackgroundColor(dontRender),
@@ -192,12 +180,10 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.gameButtonColorPicker = new ColorPicker(this.room, this.commandPrefix, setGameButtonColorCommand, {
+		this.gameButtonColorPicker = new ColorPicker(this, this.commandPrefix, setGameButtonColorCommand, {
 			currentPick: typeof gameScriptedBox.gameButtons === 'string' ? gameScriptedBox.gameButtons : undefined,
-			currentPrimaryColor: gameScriptedBox.gameButtons && typeof gameScriptedBox.gameButtons !== 'string' ?
-				gameScriptedBox.gameButtons.color as HexCode : undefined,
-			currentSecondaryColor: gameScriptedBox.gameButtons && typeof gameScriptedBox.gameButtons !== 'string' ?
-				gameScriptedBox.gameButtons.secondaryColor as HexCode : undefined,
+			currentPickObject: gameScriptedBox.gameButtons && typeof gameScriptedBox.gameButtons !== 'string' ?
+				gameScriptedBox.gameButtons : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickButtonHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickButtonLightness(dontRender),
 			onClear: (index, dontRender) => this.clearGameButtonsColor(dontRender),
@@ -207,7 +193,7 @@ class GameScriptedBox extends HtmlPageBase {
 
 		PokemonPickerBase.loadData();
 
-		this.pokemonAvatarPicker = new PokemonTextInput(this.room, this.commandPrefix, setGamePokemonAvatarCommand, {
+		this.pokemonAvatarPicker = new PokemonTextInput(this, this.commandPrefix, setGamePokemonAvatarCommand, {
 			gif: false,
 			currentInput: currentGamePokemonAvatar ? currentGamePokemonAvatar : "",
 			pokemonList: PokemonPickerBase.pokemonGens[Dex.getModelGenerations().slice().pop()!],
@@ -223,7 +209,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.backgroundBorderStyle = new BorderStyle(this.room, this.commandPrefix, setBackgroudBorderStyleCommand, {
+		this.backgroundBorderStyle = new BorderStyle(this, this.commandPrefix, setBackgroudBorderStyleCommand, {
 			currentBorder: gameScriptedBox.backgroundBorder,
 			minRadius: 2,
 			maxRadius: 100,
@@ -240,7 +226,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.buttonsBorderStyle = new BorderStyle(this.room, this.commandPrefix, setButtonBorderStyleCommand, {
+		this.buttonsBorderStyle = new BorderStyle(this, this.commandPrefix, setButtonBorderStyleCommand, {
 			currentBorder: gameScriptedBox.buttonsBorder,
 			minRadius: 2,
 			maxRadius: 50,
@@ -257,7 +243,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsBackgroundBorderStyle = new BorderStyle(this.room, this.commandPrefix, setSignupsBackgroudBorderStyleCommand, {
+		this.signupsBackgroundBorderStyle = new BorderStyle(this, this.commandPrefix, setSignupsBackgroudBorderStyleCommand, {
 			currentBorder: gameScriptedBox.signupsBackgroundBorder,
 			minRadius: 2,
 			maxRadius: 100,
@@ -275,7 +261,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsButtonsBorderStyle = new BorderStyle(this.room, this.commandPrefix, setSignupsButtonBorderStyleCommand, {
+		this.signupsButtonsBorderStyle = new BorderStyle(this, this.commandPrefix, setSignupsButtonBorderStyleCommand, {
 			currentBorder: gameScriptedBox.signupsButtonsBorder,
 			minRadius: 2,
 			maxRadius: 50,
@@ -292,7 +278,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.gameBackgroundBorderStyle = new BorderStyle(this.room, this.commandPrefix, setGameBackgroudBorderStyleCommand, {
+		this.gameBackgroundBorderStyle = new BorderStyle(this, this.commandPrefix, setGameBackgroudBorderStyleCommand, {
 			currentBorder: gameScriptedBox.gameBackgroundBorder,
 			minRadius: 0,
 			maxRadius: 0,
@@ -309,7 +295,7 @@ class GameScriptedBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.gameButtonsBorderStyle = new BorderStyle(this.room, this.commandPrefix, setGameButtonBorderStyleCommand, {
+		this.gameButtonsBorderStyle = new BorderStyle(this, this.commandPrefix, setGameButtonBorderStyleCommand, {
 			currentBorder: gameScriptedBox.gameButtonsBorder,
 			minRadius: 2,
 			maxRadius: 50,
@@ -569,6 +555,10 @@ class GameScriptedBox extends HtmlPageBase {
 	deleteFormat(): void {
 		const database = this.getDatabase();
 		delete database.gameFormatScriptedBoxes![this.userId][this.gameFormat];
+
+		if (this.gameFormat === database.gameScriptedBoxes![this.userId].previewFormat) {
+			delete database.gameScriptedBoxes![this.userId].previewFormat;
+		}
 
 		this.resetComponents();
 		this.send();
@@ -835,7 +825,7 @@ class GameScriptedBox extends HtmlPageBase {
 		if (user) name = user.name;
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Game Scripted Box</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 
 		const format = Games.getExistingFormat(this.activeGameFormat || "pmp");
 		let mascot: IPokemon | undefined;
@@ -1080,7 +1070,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new GameScriptedBox(targetRoom, user, pokemonAvatar);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new GameScriptedBox(targetRoom, user, pokemonAvatar);
 
 			if (cmd === loadFormatCommand) {
 				pages[user.id].loadFormat();
@@ -1129,7 +1119,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].setMascotGeneration(gen);
 			} else if (cmd === clearMascotGenerationCommand) {
 				pages[user.id].clearMascotGeneration();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

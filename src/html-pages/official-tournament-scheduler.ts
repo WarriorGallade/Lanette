@@ -6,7 +6,7 @@ import type { User } from "../users";
 import { FormatTextInput } from "./components/format-text-input";
 import { NumberTextInput } from "./components/number-text-input";
 import { TextInput } from "./components/text-input";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 
 const baseCommand = 'officialtournamentscheduler';
 const baseAlias = 'ots';
@@ -19,11 +19,8 @@ const formatsInputCommand = 'setformat';
 const tournamentTimeInputCommand = 'settournamenttime';
 const addDayTournamentCommand = 'adddaytournament';
 const removeDayTournamentCommand = 'removedaytournament';
-const closeCommand = 'close';
 
-const pageId = 'official-tournament-scheduler';
-
-export const id = pageId;
+export const pageId = 'official-tournament-scheduler';
 export const pages: Dict<OfficialTournamentScheduler> = {};
 
 const defaultTime: [number, number][] = [[2, 30], [9, 30], [15, 30], [20, 30]];
@@ -54,6 +51,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		super(room, user, baseCommand, pages);
 
 		this.canCreateTournament = Tournaments.canCreateTournament(room, user);
+		this.setCloseButton();
 
 		const date = new Date();
 		this.currentYear = date.getFullYear();
@@ -61,7 +59,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		this.selectedMonth = "" + (date.getMonth() + 1);
 		this.lastDayOfSelectedMonth = Tools.getLastDayOfMonth(date);
 
-		this.newMonthInput = new NumberTextInput(room, this.commandPrefix, newMonthInputCommand, {
+		this.newMonthInput = new NumberTextInput(this, this.commandPrefix, newMonthInputCommand, {
 			label: "Add new month",
 			min: 1,
 			max: 12,
@@ -74,9 +72,9 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 
-		this.dayFormatInput = new FormatTextInput(room, this.commandPrefix, formatsInputCommand, {
+		this.dayFormatInput = new FormatTextInput(this, this.commandPrefix, formatsInputCommand, {
 			currentInput: this.selectedMonth in schedule.months && this.selectedDay in schedule.months[this.selectedMonth].days ?
-				schedule.months[this.selectedMonth].days[this.selectedDay].format : "",
+				schedule.months[this.selectedMonth].days[this.selectedDay]!.format : "",
 			label: "Update format",
 			submitText: "Submit",
 			maxFormats: 1,
@@ -88,7 +86,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.tournamentTimeInput = new TextInput(room, this.commandPrefix, tournamentTimeInputCommand, {
+		this.tournamentTimeInput = new TextInput(this, this.commandPrefix, tournamentTimeInputCommand, {
 			label: "Update time",
 			submitText: "Submit",
 			onClear: () => this.send(),
@@ -139,7 +137,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 		if (this.selectedMonth in schedule.months && this.selectedDay in schedule.months[this.selectedMonth].days) {
-			this.dayFormatInput.parentSetInput(schedule.months[this.selectedMonth].days[this.selectedDay].format);
+			this.dayFormatInput.parentSetInput(schedule.months[this.selectedMonth].days[this.selectedDay]!.format);
 		}
 
 		this.chooseTournamentIndexCommand("0", true);
@@ -153,11 +151,11 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 
 		const index = parseInt(time);
 		if (isNaN(index) || index < 0 || (this.selectedMonth in schedule.months &&
-			index >= schedule.months[this.selectedMonth].days[this.selectedDay].times.length)) return;
+			index >= schedule.months[this.selectedMonth].days[this.selectedDay]!.times.length)) return;
 
 		this.selectedTournamentIndex = index;
 
-		const times = schedule.months[this.selectedMonth].days[this.selectedDay].times[index];
+		const times = schedule.months[this.selectedMonth].days[this.selectedDay]!.times[index];
 		this.tournamentTimeInput.parentSetInput(times[0] + ":" + (times[1] < 10 ? "0" : "") + times[1]);
 
 		if (!dontRender) this.send();
@@ -169,8 +167,8 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 		if (this.selectedMonth in schedule.months &&
-			schedule.months[this.selectedMonth].days[this.selectedDay].times.length < maxTournamentsPerDay) {
-			const times = schedule.months[this.selectedMonth].days[this.selectedDay].times;
+			schedule.months[this.selectedMonth].days[this.selectedDay]!.times.length < maxTournamentsPerDay) {
+			const times = schedule.months[this.selectedMonth].days[this.selectedDay]!.times;
 			const lastScheduledTime = times[times.length - 1];
 			times.push([lastScheduledTime[0], lastScheduledTime[1] + 1]);
 
@@ -186,12 +184,12 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 		if (this.selectedMonth in schedule.months &&
-			schedule.months[this.selectedMonth].days[this.selectedDay].times.length > 1) {
-			schedule.months[this.selectedMonth].days[this.selectedDay].times.splice(this.selectedTournamentIndex, 1);
+			schedule.months[this.selectedMonth].days[this.selectedDay]!.times.length > 1) {
+			schedule.months[this.selectedMonth].days[this.selectedDay]!.times.splice(this.selectedTournamentIndex, 1);
 			this.selectedTournamentIndex--;
 			if (this.selectedTournamentIndex < 0) this.selectedTournamentIndex = 0;
 
-			const times = schedule.months[this.selectedMonth].days[this.selectedDay].times[this.selectedTournamentIndex];
+			const times = schedule.months[this.selectedMonth].days[this.selectedDay]!.times[this.selectedTournamentIndex];
 			this.tournamentTimeInput.parentSetInput(times[0] + ":" + (times[1] < 10 ? "0" : "") + times[1]);
 
 			this.setOfficialTournament();
@@ -206,9 +204,9 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 		if (this.selectedMonth in schedule.months) {
-			if (schedule.months[this.selectedMonth].days[this.selectedDay].format === output) return;
+			if (schedule.months[this.selectedMonth].days[this.selectedDay]!.format === output) return;
 
-			schedule.months[this.selectedMonth].days[this.selectedDay].format = output;
+			schedule.months[this.selectedMonth].days[this.selectedDay]!.format = output;
 
 			this.setOfficialTournament();
 		}
@@ -231,9 +229,9 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const database = this.getDatabase();
 		const schedule = database.officialTournamentSchedule!.years[this.selectedYear];
 		if (this.selectedMonth in schedule.months &&
-			schedule.months[this.selectedMonth].days[this.selectedDay].times[this.selectedTournamentIndex]) {
+			schedule.months[this.selectedMonth].days[this.selectedDay]!.times[this.selectedTournamentIndex]) {
 
-			const times = schedule.months[this.selectedMonth].days[this.selectedDay].times;
+			const times = schedule.months[this.selectedMonth].days[this.selectedDay]!.times;
 			const previousIndex = this.selectedTournamentIndex - 1;
 			if (times[previousIndex]) {
 				if (hour === times[previousIndex][0] && minute === times[previousIndex][1]) {
@@ -297,8 +295,13 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 		const times = serverId in defaultTimes && this.room.id in defaultTimes[serverId] ? defaultTimes[serverId][this.room.id].slice() :
 			defaultTime.slice();
 
+		const date = new Date();
+		date.setFullYear(this.selectedYear);
+		date.setMonth(parseInt(month) - 1, 1);
+		const lastDayOfNewMonth = Tools.getLastDayOfMonth(date);
+
 		const days: Dict<ITournamentScheduleDay> = {};
-		for (let i = 1; i <= this.lastDayOfSelectedMonth; i++) {
+		for (let i = 1; i <= lastDayOfNewMonth; i++) {
 			days[i] = {format: "", times};
 		}
 
@@ -323,7 +326,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Official Tournament " +
 			"Scheduler</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br /><br />";
 		html += "</center>";
 
@@ -385,11 +388,11 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 			if (this.canCreateTournament) html += this.dayFormatInput.render();
 
 			if (this.selectedDay in schedule.months[this.selectedMonth].days) {
-				const format = Tournaments.getFormat(schedule.months[this.selectedMonth].days[this.selectedDay].format, this.room);
+				const format = Tournaments.getFormat(schedule.months[this.selectedMonth].days[this.selectedDay]!.format, this.room);
 				if (format) {
 					html += "<br />";
 					html += "<b>Current format</b>:&nbsp;" + Dex.getCustomFormatName(format) +
-						(format.tournamentName ? " (Base format: " + format.name + ")" : "");
+						(format.customFormatName ? " (Base format: " + format.name + ")" : "");
 
 					if (format.customRules) {
 						html += "<br />";
@@ -401,7 +404,7 @@ class OfficialTournamentScheduler extends HtmlPageBase {
 
 				html += "<br /><br />";
 				html += "<b>Tournaments on the " + Tools.toNumberOrderString(this.selectedDay) + "</b>:";
-				const times = schedule.months[this.selectedMonth].days[this.selectedDay].times;
+				const times = schedule.months[this.selectedMonth].days[this.selectedDay]!.times;
 				for (let i = 0; i < times.length; i++) {
 					html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + chooseTournamentIndexCommand + ", " + i,
 						"" + (i + 1), {selectedAndDisabled: this.selectedTournamentIndex === i});
@@ -457,7 +460,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new OfficialTournamentScheduler(targetRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new OfficialTournamentScheduler(targetRoom, user);
 
 			if (cmd === chooseYearCommand) {
 				pages[user.id].chooseYearCommand(targets[0].trim());
@@ -471,7 +474,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].addDayTournamentCommand();
 			} else if (cmd === removeDayTournamentCommand) {
 				pages[user.id].removeDayTournamentCommand();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

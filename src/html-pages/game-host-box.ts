@@ -12,7 +12,7 @@ import type { IPokemonPick } from "./components/pokemon-picker-base";
 import type { ITrainerPick } from "./components/trainer-picker";
 import { TrainerPicker } from "./components/trainer-picker";
 import type { PokemonChoices } from "./game-host-control-panel";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 
 type BorderPickers = 'background' | 'buttons' | 'signups-background' | 'signups-buttons';
 type BorderDatabaseKeys = 'backgroundBorder' | 'buttonsBorder' | 'signupsBackgroundBorder' | 'signupsButtonsBorder';
@@ -38,11 +38,8 @@ const setSignupsBackgroudBorderStyleCommand = 'setsignupsbackgroundborderstyle';
 const setSignupsButtonBorderStyleCommand = 'setsignupsbuttonborderstyle';
 const setTrainerCommand = 'settrainer';
 const setPokemonModelCommand = 'setpokemonmodel';
-const closeCommand = 'close';
 
-const pageId = 'game-host-box';
-
-export const id = pageId;
+export const pageId = 'game-host-box';
 export const pages: Dict<GameHostBox> = {};
 
 class GameHostBox extends HtmlPageBase {
@@ -66,6 +63,8 @@ class GameHostBox extends HtmlPageBase {
 
 	constructor(room: Room, user: User) {
 		super(room, user, baseCommand, pages);
+
+		this.setCloseButton();
 
 		const database = Storage.getDatabase(this.room);
 		let currentBackgroundColor: HexCode | IHexCodeData | undefined;
@@ -93,12 +92,9 @@ class GameHostBox extends HtmlPageBase {
 			currentSignupsButtonsBorder = box.signupsButtonsBorder;
 		}
 
-		this.backgroundColorPicker = new ColorPicker(room, this.commandPrefix, setBackgroundColorCommand, {
+		this.backgroundColorPicker = new ColorPicker(this, this.commandPrefix, setBackgroundColorCommand, {
 			currentPick: typeof currentBackgroundColor === 'string' ? currentBackgroundColor : undefined,
-			currentPrimaryColor: currentBackgroundColor && typeof currentBackgroundColor !== 'string' ?
-				currentBackgroundColor.color as HexCode : undefined,
-			currentSecondaryColor: currentBackgroundColor && typeof currentBackgroundColor !== 'string' ?
-				currentBackgroundColor.secondaryColor as HexCode : undefined,
+			currentPickObject: currentBackgroundColor && typeof currentBackgroundColor !== 'string' ? currentBackgroundColor : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearBackgroundColor(dontRender),
@@ -106,12 +102,9 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.buttonColorPicker = new ColorPicker(room, this.commandPrefix, setButtonColorCommand, {
+		this.buttonColorPicker = new ColorPicker(this, this.commandPrefix, setButtonColorCommand, {
 			currentPick: typeof currentButtonColor === 'string' ? currentButtonColor : undefined,
-			currentPrimaryColor: currentButtonColor && typeof currentButtonColor !== 'string' ?
-				currentButtonColor.color as HexCode : undefined,
-			currentSecondaryColor: currentButtonColor && typeof currentButtonColor !== 'string' ?
-				currentButtonColor.secondaryColor as HexCode : undefined,
+			currentPickObject: currentButtonColor && typeof currentButtonColor !== 'string' ? currentButtonColor : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickButtonHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickButtonLightness(dontRender),
 			onClear: (index, dontRender) => this.clearButtonsColor(dontRender),
@@ -119,12 +112,10 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsBackgroundColorPicker = new ColorPicker(room, this.commandPrefix, setSignupsBackgroundColorCommand, {
+		this.signupsBackgroundColorPicker = new ColorPicker(this, this.commandPrefix, setSignupsBackgroundColorCommand, {
 			currentPick: typeof currentSignupsBackgroundColor === 'string' ? currentSignupsBackgroundColor : undefined,
-			currentPrimaryColor: currentSignupsBackgroundColor && typeof currentSignupsBackgroundColor !== 'string' ?
-				currentSignupsBackgroundColor.color as HexCode : undefined,
-			currentSecondaryColor: currentSignupsBackgroundColor && typeof currentSignupsBackgroundColor !== 'string' ?
-				currentSignupsBackgroundColor.secondaryColor as HexCode : undefined,
+			currentPickObject: currentSignupsBackgroundColor && typeof currentSignupsBackgroundColor !== 'string' ?
+				currentSignupsBackgroundColor : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickBackgroundHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickBackgroundLightness(dontRender),
 			onClear: (index, dontRender) => this.clearSignupsBackgroundColor(dontRender),
@@ -132,12 +123,10 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsButtonColorPicker = new ColorPicker(room, this.commandPrefix, setSignupsButtonColorCommand, {
+		this.signupsButtonColorPicker = new ColorPicker(this, this.commandPrefix, setSignupsButtonColorCommand, {
 			currentPick: typeof currentSignupsButtonColor === 'string' ? currentSignupsButtonColor : undefined,
-			currentPrimaryColor: currentSignupsButtonColor && typeof currentSignupsButtonColor !== 'string' ?
-				currentSignupsButtonColor.color as HexCode : undefined,
-			currentSecondaryColor: currentSignupsButtonColor && typeof currentSignupsButtonColor !== 'string' ?
-				currentSignupsButtonColor.secondaryColor as HexCode : undefined,
+			currentPickObject: currentSignupsButtonColor && typeof currentSignupsButtonColor !== 'string' ?
+				currentSignupsButtonColor : undefined,
 			onPickHueVariation: (index, hueVariation, dontRender) => this.pickButtonHueVariation(dontRender),
 			onPickLightness: (index, lightness, dontRender) => this.pickButtonLightness(dontRender),
 			onClear: (index, dontRender) => this.clearSignupsButtonsColor(dontRender),
@@ -145,7 +134,7 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.backgroundBorderStyle = new BorderStyle(room, this.commandPrefix, setBackgroudBorderStyleCommand, {
+		this.backgroundBorderStyle = new BorderStyle(this, this.commandPrefix, setBackgroudBorderStyleCommand, {
 			currentBorder: currentBackgroundBorder,
 			minRadius: 2,
 			maxRadius: 100,
@@ -162,7 +151,7 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.buttonsBorderStyle = new BorderStyle(room, this.commandPrefix, setButtonBorderStyleCommand, {
+		this.buttonsBorderStyle = new BorderStyle(this, this.commandPrefix, setButtonBorderStyleCommand, {
 			currentBorder: currentButtonsBorder,
 			minRadius: 2,
 			maxRadius: 50,
@@ -179,7 +168,7 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsBackgroundBorderStyle = new BorderStyle(room, this.commandPrefix, setSignupsBackgroudBorderStyleCommand, {
+		this.signupsBackgroundBorderStyle = new BorderStyle(this, this.commandPrefix, setSignupsBackgroudBorderStyleCommand, {
 			currentBorder: currentSignupsBackgroundBorder,
 			minRadius: 2,
 			maxRadius: 100,
@@ -197,7 +186,7 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.signupsButtonsBorderStyle = new BorderStyle(room, this.commandPrefix, setSignupsButtonBorderStyleCommand, {
+		this.signupsButtonsBorderStyle = new BorderStyle(this, this.commandPrefix, setSignupsButtonBorderStyleCommand, {
 			currentBorder: currentSignupsButtonsBorder,
 			minRadius: 2,
 			maxRadius: 50,
@@ -214,7 +203,7 @@ class GameHostBox extends HtmlPageBase {
 			reRender: () => this.send(),
 		});
 
-		this.trainerPicker = new TrainerPicker(room, this.commandPrefix, setTrainerCommand, {
+		this.trainerPicker = new TrainerPicker(this, this.commandPrefix, setTrainerCommand, {
 			currentPick: currentTrainer,
 			userId: this.userId,
 			onSetTrainerGen: (index, trainerGen, dontRender) => this.setTrainerGen(dontRender),
@@ -239,7 +228,7 @@ class GameHostBox extends HtmlPageBase {
 
 		this.maxPokemonModels = maxPokemon;
 
-		this.pokemonModelPicker = new PokemonModelPicker(room, this.commandPrefix, setPokemonModelCommand, {
+		this.pokemonModelPicker = new PokemonModelPicker(this, this.commandPrefix, setPokemonModelCommand, {
 			maxPokemon,
 			clearAllPokemon: () => this.clearAllPokemon(),
 			submitAllPokemon: (pokemon) => this.submitAllPokemon(pokemon),
@@ -609,7 +598,7 @@ class GameHostBox extends HtmlPageBase {
 		if (user) name = user.name;
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Game Host Box</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 
 		html += "<br />";
 		html += Games.getHostBoxHtml(this.room, name, name + "'s Game");
@@ -735,7 +724,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new GameHostBox(targetRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new GameHostBox(targetRoom, user);
 
 			if (cmd === chooseBackgroundColorPicker) {
 				pages[user.id].chooseBackgroundColorPicker();
@@ -757,7 +746,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].chooseTrainerPicker();
 			} else if (cmd === choosePokemonModelPicker) {
 				pages[user.id].choosePokemonModelPicker();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

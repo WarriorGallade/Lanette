@@ -1,5 +1,9 @@
 import fs = require('fs');
 import path = require('path');
+import { BattleEliminationPage } from './html-pages/activity-pages/battle-elimination';
+import { CardHighLowPage } from './html-pages/activity-pages/card-high-low';
+import { CardMatchingPage } from './html-pages/activity-pages/card-matching';
+import { GameHostControlPanel } from './html-pages/game-host-control-panel';
 
 import type { HtmlPageBase } from './html-pages/html-page-base';
 import type { Room } from "./rooms";
@@ -7,6 +11,13 @@ import type {
 	BaseCommandDefinitions, CommandDefinitions, CommandErrorArray, ICommandFile, ICommandGuide, IHtmlPageFile, LoadedCommands
 } from "./types/command-parser";
 import type { User } from "./users";
+
+interface IGameHtmlPages {
+	cardMatching: typeof CardMatchingPage;
+	cardHighLow: typeof CardHighLowPage;
+	battleElimination: typeof BattleEliminationPage;
+	gameHostControlPanel: typeof GameHostControlPanel;
+}
 
 export class CommandContext {
 	runningMultipleTargets: boolean | null = null;
@@ -121,14 +132,24 @@ export class CommandParser {
 	private commandModules: ICommandFile[] = [];
 	private htmlPages: Dict<Dict<HtmlPageBase>> = {};
 	private htmlPageModules: Dict<IHtmlPageFile> = {};
-	private htmlPagesDir: string = path.join(Tools.buildFolder, 'html-pages');
+	private htmlPagesDir: string = path.join(Tools.srcBuildFolder, 'html-pages');
+	private readonly gameHtmlPages: IGameHtmlPages = {
+		cardMatching: CardMatchingPage,
+		cardHighLow: CardHighLowPage,
+		battleElimination: BattleEliminationPage,
+		gameHostControlPanel: GameHostControlPanel,
+	};
 
 	private commandsDir: string;
 	private privateCommandsDir: string;
 
 	constructor() {
-		this.commandsDir = path.join(Tools.buildFolder, 'commands');
+		this.commandsDir = path.join(Tools.srcBuildFolder, 'commands');
 		this.privateCommandsDir = path.join(this.commandsDir, 'private');
+	}
+
+	getGameHtmlPages(): IGameHtmlPages {
+		return this.gameHtmlPages;
 	}
 
 	loadCommandDefinitions<ThisContext, ReturnType>(definitions: CommandDefinitions<ThisContext, ReturnType>):
@@ -176,10 +197,10 @@ export class CommandParser {
 			if (!fileName.endsWith('.js') || fileName === 'html-page-base.js') continue;
 			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			const htmlPage = require(path.join(this.htmlPagesDir, fileName)) as IHtmlPageFile;
-			if (htmlPage.id in this.htmlPages) throw new Error("Html page id '" + htmlPage.id + "' is used for more than 1 page.");
+			if (htmlPage.pageId in this.htmlPages) throw new Error("Html page id '" + htmlPage.pageId + "' is used for more than 1 page.");
 
-			this.htmlPageModules[htmlPage.id] = htmlPage;
-			this.htmlPages[htmlPage.id] = htmlPage.pages;
+			this.htmlPageModules[htmlPage.pageId] = htmlPage;
+			this.htmlPages[htmlPage.pageId] = htmlPage.pages;
 
 			if (htmlPage.commands) {
 				for (const i in htmlPage.commands) {

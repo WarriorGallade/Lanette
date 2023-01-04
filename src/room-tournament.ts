@@ -127,7 +127,7 @@ export class Tournament extends Activity {
 
 	willAwardPoints(): boolean {
 		if (this.manuallyEnabledPoints !== undefined) return this.manuallyEnabledPoints;
-		return this.formatAwardsPoints();
+		return this.official || this.formatAwardsPoints();
 	}
 
 	adjustCap(cap?: number): void {
@@ -339,15 +339,29 @@ export class Tournament extends Activity {
 
 			const placesHtml = Tournaments.getPlacesHtml('tournamentLeaderboard', (this.official ? "Official " : "") + this.format.name,
 				winners, runnersUp, semiFinalists, winnerPoints, runnerUpPoints, semiFinalistPoints);
-			const formatLeaderboard = Tournaments.getFormatLeaderboardHtml(this.room, this.format);
-
 			const showTrainerCard = winners.length === 1 && Config.showTournamentTrainerCards &&
 				Config.showTournamentTrainerCards.includes(this.room.id);
-			this.sayHtml("<div class='infobox-limited'" + (showTrainerCard ? " style='max-height:125px'" : "") + ">" + placesHtml +
-				(formatLeaderboard ? "<br /><br />" + formatLeaderboard : "") + "</div>");
 
 			if (showTrainerCard) {
-				Tournaments.displayTrainerCard(this.room, winners[0]);
+				const buttonRoom = this.room.alias || this.room.id;
+
+				const tournamentPointsShop = Tournaments.hasTournamentPointsShopItems(this.room) ? Client.getQuietPmButton(this.room,
+					Config.commandCharacter + "tpshop " + buttonRoom, "Visit the points shop") : "";
+
+				Tournaments.displayTrainerCard(this.room, winners[0], "<div class='infobox-limited'><center>" + placesHtml +
+					"</center><br />", "<br /><center>" + Client.getQuietPmButton(this.room, Config.commandCharacter + "topprivate " +
+					buttonRoom, this.room.title + " leaderboard") + "&nbsp;" +
+					Client.getQuietPmButton(this.room, Config.commandCharacter + "topprivate " + buttonRoom + "," + this.format.name,
+						this.format.name + " leaderboard") + "&nbsp;" +
+					Client.getQuietPmButton(this.room, Config.commandCharacter + "nexttourprivate " + buttonRoom,
+						"Next tournament") + "&nbsp;" +
+					Client.getQuietPmButton(this.room, Config.commandCharacter + "ttc " + buttonRoom,
+						"Customize your profile") + tournamentPointsShop + "</center></div>");
+			} else {
+				const formatLeaderboard = Tournaments.getFormatLeaderboardHtml(this.room, this.format);
+
+				this.sayHtml("<div class='infobox-limited'>" + placesHtml + (formatLeaderboard ? "<br /><br />" + formatLeaderboard : "") +
+					"</div>");
 			}
 		}
 
@@ -396,7 +410,7 @@ export class Tournament extends Activity {
 			}
 		}
 
-		if (this.battleRoomGame) {
+		if (this.battleRoomGame && this.updates.bracketData) {
 			if (this.info.isStarted && this.battleRoomGame.onTournamentBracketUpdate) {
 				this.battleRoomGame.onTournamentBracketUpdate(this.players, this.info.bracketData, this.info.isStarted);
 			} else if (!this.info.isStarted && this.info.bracketData.users && this.battleRoomGame.onTournamentUsersUpdate) {

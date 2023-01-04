@@ -1,21 +1,18 @@
 import type { Room } from "../rooms";
 import type { BaseCommandDefinitions } from "../types/command-parser";
 import type { User } from "../users";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 import { GameLeaderboard } from "./components/game-leaderboard";
 import { GamePointsBreakdown } from "./components/game-points-breakdown";
 
 const baseCommand = 'scriptedgamestats';
 const chooseLeaderboard = 'chooseleaderboard';
 const choosePointsBreakdown = 'choosepointsbreakdown';
-const closeCommand = 'close';
 
 const leaderboardCommand = 'gameleaderboard';
 const pointsBreakdownCommand = 'gamepointsbreakdown';
 
-const pageId = 'scripted-game-stats';
-
-export const id = pageId;
+export const pageId = 'scripted-game-stats';
 export const pages: Dict<ScriptedGameStats> = {};
 
 class ScriptedGameStats extends HtmlPageBase {
@@ -28,13 +25,15 @@ class ScriptedGameStats extends HtmlPageBase {
 	constructor(room: Room, user: User) {
 		super(room, user, baseCommand, pages);
 
+		this.setCloseButton();
+
 		const showPreviousCycles = user.isDeveloper() || user.hasRank(room, 'voice');
-		this.gameLeaderboard = new GameLeaderboard(room, this.commandPrefix, leaderboardCommand, {
+		this.gameLeaderboard = new GameLeaderboard(this, this.commandPrefix, leaderboardCommand, {
 			showPreviousCycles,
 			reRender: () => this.send(),
 		});
 
-		this.gamePointsBreakdown = new GamePointsBreakdown(room, this.commandPrefix, pointsBreakdownCommand, {
+		this.gamePointsBreakdown = new GamePointsBreakdown(this, this.commandPrefix, pointsBreakdownCommand, {
 			showPreviousCycles,
 			reRender: () => this.send(),
 		});
@@ -65,7 +64,7 @@ class ScriptedGameStats extends HtmlPageBase {
 
 	render(): string {
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + " Scripted Game Stats</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br /><br />";
 
         const leaderboardView = this.currentView === 'leaderboard';
@@ -106,13 +105,13 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new ScriptedGameStats(targetRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new ScriptedGameStats(targetRoom, user);
 
 			if (cmd === chooseLeaderboard) {
 				pages[user.id].chooseLeaderboard();
 			} else if (cmd === choosePointsBreakdown) {
 				pages[user.id].choosePointsBreakdown();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

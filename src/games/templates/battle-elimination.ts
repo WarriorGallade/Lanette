@@ -1,3 +1,4 @@
+import type { BattleEliminationPage } from "../../html-pages/activity-pages/battle-elimination";
 import { EliminationNode } from "../../lib/elimination-node";
 import { Player } from "../../room-activity";
 import { ScriptedGame } from "../../room-game-scripted";
@@ -16,16 +17,24 @@ interface IEliminationTree<T> {
 	nextLayerLeafNodes?: EliminationNode<T>[];
 }
 
-interface ITeamChange {
-	additions: number;
-	choices: string[];
-	drops: number;
-	evolutions: number;
+export interface ITeamChange {
+	readonly additions: number;
+	readonly choices: readonly string[] | undefined;
+	readonly drops: number;
+	readonly evolutions: number;
+}
+
+export interface IRoundTeamRequirements {
+	additionsThisRound: number;
+	currentTeamLength: number;
+	dropsThisRound: number;
+	evolutionsThisRound: number;
 }
 
 const REROLL_COMMAND = "reroll";
+const TOUR_PAGE_COMMAND = "tourpage";
+const HTML_PAGE_COMMAND = "battleeliminationhtmlpage";
 const REROLL_START_DELAY = 30 * 1000;
-const UPDATE_HTML_PAGE_DELAY = 5 * 1000;
 const CHECK_CHALLENGES_INACTIVE_DELAY = 30 * 1000;
 const ADVERTISEMENT_TIME = 5 * 60 * 1000;
 const POTENTIAL_MAX_PLAYERS: number[] = [12, 16, 24, 32, 48, 64];
@@ -40,13 +49,13 @@ export abstract class BattleElimination extends ScriptedGame {
 	advertisementInterval: NodeJS.Timer | null = null;
 	allowsFormes: boolean = true;
 	allowsScouting: boolean = false;
+	allowsSingleStage: boolean = false;
 	availableMatchNodes: EliminationNode<Player>[] = [];
 	banlist: string[] = [];
-	battleFormatId: string = 'ou';
+	battleFormatId: string = 'gen8ou';
 	battleFormatType: GameType = 'singles';
 	readonly battleData = new Map<Room, IBattleGameData>();
 	readonly battleRooms: string[] = [];
-	bracketHtml: string = '';
 	canChangeFormat: boolean = false;
 	canRejoin: boolean = false;
 	canReroll: boolean = false;
@@ -54,6 +63,7 @@ export abstract class BattleElimination extends ScriptedGame {
 	checkChallengesTimers = new Map<EliminationNode<Player>, NodeJS.Timer>();
 	checkChallengesInactiveTimers = new Map<EliminationNode<Player>, NodeJS.Timer>();
 	color: string | null = null;
+	creatingSubRoom: boolean = false;
 	disqualifiedOpponents = new Map<Player, Player>();
 	disqualifiedPlayers = new Map<Player, string>();
 	dontAutoCloseHtmlPages: boolean = true;
@@ -72,10 +82,14 @@ export abstract class BattleElimination extends ScriptedGame {
 	hasSpeciesClause: boolean = false;
 	htmlPageGameDescription: string = '';
 	htmlPageGameName: string = '';
+	htmlPages = new Map<Player, BattleEliminationPage>();
+	htmlPageCommand: string = HTML_PAGE_COMMAND;
 	internalGame = true;
 	leftBeforeEliminationStarted: Player[] = [];
 	maxPlayers: number = POTENTIAL_MAX_PLAYERS[POTENTIAL_MAX_PLAYERS.length - 1];
 	minPlayers: number = 4;
+	maxTeamSize: number = 6;
+	minTeamSize: number = 1;
 	monoColor: boolean = false;
 	monoRegion: boolean = false;
 	monoType: boolean = false;
@@ -92,9 +106,9 @@ export abstract class BattleElimination extends ScriptedGame {
 	rerolls = new Map<Player, boolean>();
 	rerollStartDelay: number = REROLL_START_DELAY;
 	requiredTier: string | null = null;
+	rulesHtml: string = "";
 	sharedTeams: boolean = false;
 	spectatorPlayers = new Set<Player>();
-	spectatorUsers = new Set<string>();
 	starterPokemon = new Map<Player, readonly string[]>();
 	startingTeamsLength: number = 6;
 	teamChanges = new Map<Player, ITeamChange[]>();
@@ -105,7 +119,6 @@ export abstract class BattleElimination extends ScriptedGame {
 	type: string | null = null;
 	usesCloakedPokemon: boolean = false;
 	usesHtmlPage = true;
-	updateHtmlPagesTimeout: NodeJS.Timer | null = null;
 	validateTeams: boolean = true;
 
 	// set in onInitialize
@@ -126,69 +139,96 @@ export abstract class BattleElimination extends ScriptedGame {
 				return false;
 			}
 
-			const ruleTable = Dex.getRuleTable(battleFormat);
-			if (!ruleTable.has("teampreview")) {
-				this.say("You can only change the format to one that has Team Preview.");
-				return false;
-			}
-
-			if (battleFormat.gameType !== this.battleFormatType) {
-				this.say("You can only change the format to another " + this.battleFormatType + " format.");
-				return false;
-			}
-
-			const oneVsOne = this.startingTeamsLength === 1 && !this.additionsPerRound;
-			const twoVsTwo = this.startingTeamsLength === 2 && !this.additionsPerRound;
-
-			if (ruleTable.minTeamSize > this.startingTeamsLength) {
-				this.say("You can only change the format to one that allows bringing only " + this.startingTeamsLength + " Pokemon.");
-				return false;
-			}
-
-			if (twoVsTwo) {
-				if (ruleTable.maxTeamSize < 2) {
-					this.say("You can only change the format to one that allows bringing 2 or more Pokemon.");
-					return false;
-				}
-			} else if (!oneVsOne) {
-				if (ruleTable.maxTeamSize < 6) {
-					this.say("You can only change the format to one that allows bringing 6 or more Pokemon.");
-					return false;
-				}
-			}
-
-			if (oneVsOne) {
-				if (ruleTable.pickedTeamSize && ruleTable.pickedTeamSize !== 1) {
-					this.say("You can only change the format to one that requires battling with 1 Pokemon.");
-					return false;
-				}
-			} else if (twoVsTwo) {
-				if (ruleTable.pickedTeamSize && ruleTable.pickedTeamSize !== 2) {
-					this.say("You can only change the format to one that requires battling with 2 Pokemon.");
-					return false;
-				}
-			} else {
-				if (ruleTable.pickedTeamSize) {
-					this.say("You can only change the format to one that allows battling with a variable number of Pokemon.");
-					return false;
-				}
-			}
-
-			if (battleFormat.team) {
-				this.say("You cannot change the format to one that uses generated teams.");
-				return false;
-			}
-
 			this.battleFormatId = battleFormat.inputTarget;
 			try {
 				this.setFormat();
 				this.generatePokedex();
 			} catch (e) {
-				this.say("Unable to generate valid Pokemon for the format " + battleFormat.name + ".");
+				this.say("Unable to generate enough valid Pokemon for the format " + battleFormat.name + ".");
 				return false;
 			}
 
 			this.format.nameWithOptions += ": " + battleFormat.nameWithoutGen;
+		}
+
+		if (inputProperties.options.rules) {
+			if (!this.canChangeFormat) {
+				this.say("You cannot change the rules for " + this.format.nameWithOptions + ".");
+				return false;
+			}
+
+			const rules = inputProperties.options.rules.split("|");
+			let formatid = Dex.joinNameAndCustomRules(this.battleFormatId, Dex.resolveCustomRuleAliases(rules));
+			try {
+				formatid = Dex.validateFormat(formatid);
+			} catch (e) {
+				this.say("Error setting custom rules: " + (e as Error).message);
+				return false;
+			}
+
+			this.battleFormatId = formatid;
+			try {
+				this.setFormat();
+				this.generatePokedex();
+			} catch (e) {
+				this.say("Unable to generate enough valid Pokemon for the format " + Dex.getExistingFormat(this.battleFormatId).name +
+					" with custom rules.");
+				return false;
+			}
+		}
+
+		const format = Dex.getExistingFormat(this.battleFormatId);
+		if (format.gameType !== this.battleFormatType) {
+			this.say("You can only change the format to another " + this.battleFormatType + " format.");
+			return false;
+		}
+
+		if (format.team) {
+			this.say("You cannot change the format to one that uses generated teams.");
+			return false;
+		}
+
+		const ruleTable = Dex.getRuleTable(format);
+		if (!ruleTable.has("teampreview")) {
+			this.say("You can only change the format to one that has Team Preview.");
+			return false;
+		}
+
+		const oneVsOne = this.startingTeamsLength === 1 && !this.additionsPerRound;
+		const twoVsTwo = this.startingTeamsLength === 2 && !this.additionsPerRound;
+
+		if (ruleTable.minTeamSize > this.startingTeamsLength) {
+			this.say("You can only change the format to one that allows bringing only " + this.startingTeamsLength + " Pokemon.");
+			return false;
+		}
+
+		if (twoVsTwo) {
+			if (ruleTable.maxTeamSize < 2) {
+				this.say("You can only change the format to one that allows bringing 2 or more Pokemon.");
+				return false;
+			}
+		} else if (!oneVsOne) {
+			if (ruleTable.maxTeamSize < 6) {
+				this.say("You can only change the format to one that allows bringing 6 or more Pokemon.");
+				return false;
+			}
+		}
+
+		if (oneVsOne) {
+			if (ruleTable.pickedTeamSize && ruleTable.pickedTeamSize !== 1) {
+				this.say("You can only change the format to one that requires battling with 1 Pokemon.");
+				return false;
+			}
+		} else if (twoVsTwo) {
+			if (ruleTable.pickedTeamSize && ruleTable.pickedTeamSize !== 2) {
+				this.say("You can only change the format to one that requires battling with 2 Pokemon.");
+				return false;
+			}
+		} else {
+			if (ruleTable.pickedTeamSize) {
+				this.say("You can only change the format to one that allows battling with a variable number of Pokemon.");
+				return false;
+			}
 		}
 
 		return true;
@@ -203,6 +243,7 @@ export abstract class BattleElimination extends ScriptedGame {
 	afterInitialize(): void {
 		this.setFormat();
 		this.firstRoundTime = this.activityWarnTimeout + this.activityDQTimeout + this.firstRoundExtraTime;
+		this.setRulesHtml();
 
 		this.debugLog("getPossibleTeamsOptions: " + JSON.stringify(this.getPossibleTeamsOptions()));
 	}
@@ -238,88 +279,6 @@ export abstract class BattleElimination extends ScriptedGame {
 		return maxPlayers;
 	}
 
-	getCustomRules(): string[] {
-		const customRules = this.battleFormat.customRules ? this.battleFormat.customRules.slice() : [];
-		const allPokemon: string[] = [];
-		const checkedPokemon: Dict<boolean> = {};
-
-		for (const name of this.pokedex) {
-			const pokemon = Dex.getExistingPokemon(name);
-
-			const formes = this.allowsFormes ? Dex.getFormes(pokemon, true) : [pokemon.name];
-			const usableFormes: string[] = [];
-			for (const forme of formes) {
-				if (this.battleFormat.usablePokemon!.includes(forme)) usableFormes.push(forme);
-			}
-
-			if (this.evolutionsPerRound) {
-				const evolutionLines = Dex.getEvolutionLines(pokemon, usableFormes);
-				for (const line of evolutionLines) {
-					for (const stage of line) {
-						if (stage in checkedPokemon) continue;
-
-						const stageFormes = this.allowsFormes ? Dex.getFormes(Dex.getExistingPokemon(stage), true) : [stage];
-						const usableStageFormes: string[] = [];
-						for (const stageForme of stageFormes) {
-							if (this.battleFormat.usablePokemon!.includes(stageForme)) usableStageFormes.push(stageForme);
-						}
-
-						let addBaseModifier = false;
-						if (!Dex.getExistingPokemon(stage).forme && usableStageFormes.length !== stageFormes.length) {
-							for (const usableStageForme of usableStageFormes) {
-								if (!Dex.getExistingPokemon(usableStageForme).forme) {
-									addBaseModifier = true;
-									break;
-								}
-							}
-						}
-
-						if (addBaseModifier) {
-							const baseModifier = stage + "-Base";
-							if (!allPokemon.includes(baseModifier)) allPokemon.push(baseModifier);
-						}
-
-						for (const usableStageForme of usableStageFormes) {
-							if (addBaseModifier && usableStageForme === stage) continue;
-
-							if (!allPokemon.includes(usableStageForme)) allPokemon.push(usableStageForme);
-						}
-
-						checkedPokemon[stage] = true;
-					}
-				}
-			} else {
-				let addBaseModifier = false;
-				if (!pokemon.forme && usableFormes.length !== formes.length) {
-					for (const forme of usableFormes) {
-						if (!Dex.getExistingPokemon(forme).forme) {
-							addBaseModifier = true;
-							break;
-						}
-					}
-				}
-
-				if (addBaseModifier) {
-					const baseModifier = pokemon.name + "-Base";
-					if (!allPokemon.includes(baseModifier)) allPokemon.push(baseModifier);
-				}
-
-				for (const usableForme of usableFormes) {
-					if (addBaseModifier && usableForme === pokemon.name) continue;
-
-					if (!allPokemon.includes(usableForme)) allPokemon.push(usableForme);
-				}
-			}
-		}
-
-		const pokemonListRules = Dex.getCustomRulesForPokemonList(allPokemon);
-		for (const rule of pokemonListRules) {
-			if (!customRules.includes(rule)) customRules.push(rule);
-		}
-
-		return customRules;
-	}
-
 	meetsPokemonCriteria(pokemon: IPokemon, type: 'starter' | 'evolution', bannedFormes: readonly string[]): boolean {
 		if (pokemon.battleOnly || !this.battleFormat.usablePokemon!.includes(pokemon.name) || this.banlist.includes(pokemon.name) ||
 			(this.type && !pokemon.types.includes(this.type)) || bannedFormes.includes(pokemon.name) ||
@@ -340,7 +299,8 @@ export abstract class BattleElimination extends ScriptedGame {
 		return true;
 	}
 
-	createPokedex(): string[] {
+	createBasePokedex(): string[] {
+		const dex = Dex.getDex(this.battleFormat.mod);
 		const teamPreviewHiddenFormes = Dex.getTeamPreviewHiddenFormes();
 		const fullyEvolved = this.fullyEvolved || (this.evolutionsPerRound < 1 && !this.usesCloakedPokemon);
 		const checkEvolutions = this.evolutionsPerRound !== 0;
@@ -349,8 +309,8 @@ export abstract class BattleElimination extends ScriptedGame {
 		const pokedex: IPokemon[] = [];
 
 		outer:
-		for (const name of Dex.getData().pokemonKeys) {
-			const pokemon = Dex.getExistingPokemon(name);
+		for (const name of dex.getData().pokemonKeys) {
+			const pokemon = dex.getExistingPokemon(name);
 			if (!this.meetsPokemonCriteria(pokemon, 'starter', teamPreviewHiddenFormes)) continue;
 
 			if (this.gen && pokemon.gen !== this.gen) continue;
@@ -359,7 +319,8 @@ export abstract class BattleElimination extends ScriptedGame {
 			if (this.requiredTier) {
 				if (pokemon.tier !== this.requiredTier) continue;
 			} else if (fullyEvolved) {
-				if (!pokemon.prevo || pokemon.nfe) continue;
+				if ((!pokemon.prevo && !this.allowsSingleStage) || pokemon.nfe ||
+					(pokemon.forme && dex.getExistingPokemon(pokemon.baseSpecies).nfe)) continue;
 			} else {
 				if (pokemon.prevo || !pokemon.nfe) continue;
 			}
@@ -367,18 +328,18 @@ export abstract class BattleElimination extends ScriptedGame {
 			if (checkEvolutions) {
 				// filter out formes such as battleOnly that don't have a prevo and give an advantage
 				if (deEvolution && pokemon.prevo) {
-					const formes = Dex.getFormes(pokemon, true);
+					const formes = dex.getFormes(pokemon, true);
 					for (const forme of formes) {
-						if (!Dex.getExistingPokemon(forme).prevo) continue outer;
+						if (!dex.getExistingPokemon(forme).prevo) continue outer;
 					}
 				}
 
-				const evolutionLines = Dex.getEvolutionLines(pokemon);
+				const evolutionLines = dex.getEvolutionLines(pokemon);
 				let validEvolutionLines = evolutionLines.length;
 				for (const line of evolutionLines) {
 					let validLine = true;
 					for (const stage of line) {
-						const evolution = Dex.getExistingPokemon(stage);
+						const evolution = dex.getExistingPokemon(stage);
 						if (evolution === pokemon) continue;
 						if (!this.meetsPokemonCriteria(evolution, 'evolution', teamPreviewHiddenFormes)) {
 							validEvolutionLines--;
@@ -396,13 +357,17 @@ export abstract class BattleElimination extends ScriptedGame {
 			pokedex.push(pokemon);
 		}
 
-		return pokedex.filter(x => !(x.forme && pokedex.includes(Dex.getExistingPokemon(x.baseSpecies)))).map(x => x.name);
+		const pokedexNames = pokedex.map(x => x.name);
+		return pokedex.filter(x => !(x.forme && pokedexNames.includes(dex.getExistingPokemon(x.baseSpecies).name))).map(x => x.name);
 	}
 
 	generateBracket(players?: Player[]): void {
 		let tree: IEliminationTree<Player> | null = null;
 
 		if (!players) players = this.shufflePlayers();
+
+		this.debugLog("Generating bracket with the following players (" + players.length + "): " + players.map(x => x.name).join(", "));
+
 		for (const player of players) {
 			if (!tree) {
 				tree = {
@@ -453,24 +418,25 @@ export abstract class BattleElimination extends ScriptedGame {
 			}
 		}
 
+		const firstRoundByeNames: string[] = [];
 		this.firstRoundByes.forEach(player => {
-			player.round!++;
 			if (this.additionsPerRound || this.dropsPerRound || this.evolutionsPerRound) {
-				const dropsThisRound = Math.min(this.dropsPerRound, this.startingTeamsLength - (this.additionsPerRound ? 0 : 1));
-				const additionsThisRound = Math.min(this.additionsPerRound, 6 - (this.startingTeamsLength - dropsThisRound));
+				firstRoundByeNames.push(player.name);
+
+				const requirements = this.getRoundTeamRequirements(player.round!);
 
 				const pokemon: string[] = [];
-				for (let i = 0; i < additionsThisRound; i++) {
+				for (let i = 0; i < requirements.additionsThisRound; i++) {
 					const mon = this.pokedex.shift();
 					if (!mon) throw new Error("Not enough Pokemon for first round bye (" + player.name + ")");
 					pokemon.push(mon);
 				}
 
 				const teamChange: ITeamChange = {
-					additions: additionsThisRound,
+					additions: requirements.additionsThisRound,
 					choices: pokemon,
-					drops: dropsThisRound,
-					evolutions: this.evolutionsPerRound,
+					drops: requirements.dropsThisRound,
+					evolutions: requirements.evolutionsThisRound,
 				};
 
 				this.debugLog(player.name + " first round bye team changes: " + JSON.stringify(teamChange));
@@ -479,17 +445,34 @@ export abstract class BattleElimination extends ScriptedGame {
 				this.firstRoundByeAdditions.set(player, pokemon);
 				this.updatePossibleTeams(player, pokemon);
 
+				player.round!++;
+				this.updateTeamChangesHtml(player);
+
 				this.debugLog(player.name + " new possible teams after bye: " +
 					JSON.stringify(this.possibleTeams.get(player)!.join(" | ")));
 
 				if (!player.eliminated) {
 					player.say("You were given a first round bye so check the tournament page for additional team changes!");
-					if (this.subRoom) this.updatePlayerHtmlPage(player);
 				}
+			} else {
+				player.round!++;
 			}
+
+			const htmlPage = this.getHtmlPage(player);
+			htmlPage.syncRound();
+			htmlPage.send();
 		});
 
 		this.updateMatches(true);
+
+		if (firstRoundByeNames.length) {
+			const text = "**First round byes** (check your tournament pages): " + firstRoundByeNames.join(", ");
+			if (this.subRoom) {
+				this.subRoom.say(text);
+			} else {
+				this.say(text);
+			}
+		}
 	}
 
 	updateBracketHtml(): void {
@@ -584,7 +567,9 @@ export abstract class BattleElimination extends ScriptedGame {
 
 		html += '</table>';
 
-		this.bracketHtml = html;
+		this.htmlPages.forEach(page => {
+			page.setBracketHtml(html);
+		});
 	}
 
 	getMatchesByRound(): Dict<EliminationNode<Player>[]> {
@@ -669,14 +654,16 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 
 		if (!this.ended) {
-			if (this.subRoom) {
-				for (const winner of winners) {
-					this.updatePlayerHtmlPage(winner);
-				}
+			for (const winner of winners) {
+				this.updateTeamChangesHtml(winner);
 
-				for (const player of players) {
-					this.updatePlayerHtmlPage(player);
-				}
+				const htmlPage = this.getHtmlPage(winner);
+				htmlPage.syncRound();
+				htmlPage.send();
+			}
+
+			for (const player of players) {
+				this.sendHtmlPage(player);
 			}
 
 			this.updateMatches();
@@ -717,6 +704,36 @@ export abstract class BattleElimination extends ScriptedGame {
 		return nodes;
 	}
 
+	getRoundTeamRequirements(round: number): IRoundTeamRequirements {
+		let currentTeamLength: number;
+		const roundTeamLengthChange = this.additionsPerRound - this.dropsPerRound;
+		const previousRounds = round - 1;
+		if (roundTeamLengthChange > 0) {
+			currentTeamLength = Math.min(this.maxTeamSize, this.startingTeamsLength + (previousRounds * roundTeamLengthChange));
+		} else if (roundTeamLengthChange < 0) {
+			currentTeamLength = Math.max(this.minTeamSize, this.startingTeamsLength - (previousRounds * Math.abs(roundTeamLengthChange)));
+		} else {
+			currentTeamLength = this.startingTeamsLength;
+		}
+
+		let dropsThisRound = this.dropsPerRound;
+		let additionsThisRound = this.additionsPerRound;
+		while (dropsThisRound && currentTeamLength + additionsThisRound - dropsThisRound < this.minTeamSize) {
+			dropsThisRound--;
+		}
+
+		while (additionsThisRound && currentTeamLength + additionsThisRound - dropsThisRound > this.maxTeamSize) {
+			additionsThisRound--;
+		}
+
+		return {
+			additionsThisRound,
+			currentTeamLength,
+			dropsThisRound,
+			evolutionsThisRound: this.evolutionsPerRound,
+		};
+	}
+
 	setMatchResult(node: EliminationNode<Player>, winner: Player, loserTeam?: string[]): ITeamChange[] {
 		if (node.state !== 'available' || !node.children || !node.children[0].user || !node.children[1].user) {
 			throw new Error("setMatchResult() called with unavailable node");
@@ -745,49 +762,36 @@ export abstract class BattleElimination extends ScriptedGame {
 
 		let winnerTeamChanges: ITeamChange[] = [];
 		if (this.getRemainingPlayerCount() > 1 && (this.additionsPerRound || this.dropsPerRound || this.evolutionsPerRound)) {
-			let currentTeamLength: number;
-			const roundTeamLengthChange = this.additionsPerRound + this.dropsPerRound;
-			const addingPokemon = roundTeamLengthChange > 0;
-			const droppingPokemon = roundTeamLengthChange < 0;
-			const previousRounds = winner.round! - 1;
-			if (addingPokemon) {
-				currentTeamLength = Math.min(6, this.startingTeamsLength + (previousRounds * roundTeamLengthChange));
-			} else if (droppingPokemon) {
-				currentTeamLength = Math.max(1, this.startingTeamsLength - (previousRounds * roundTeamLengthChange));
-			} else {
-				currentTeamLength = this.startingTeamsLength;
-			}
-
-			const dropsThisRound = Math.min(this.dropsPerRound, currentTeamLength - (this.additionsPerRound ? 0 : 1));
-			const additionsThisRound = Math.min(this.additionsPerRound, 6 - (currentTeamLength - dropsThisRound));
-
-			if (additionsThisRound || dropsThisRound || this.evolutionsPerRound) {
-				if (!loserTeam) {
-					loserTeam = this.getRandomTeam(loser);
-					this.debugLog(winner.name + " choices from " + loser.name + "'s team (random): " + loserTeam.join(", "));
-				} else {
-					if ((addingPokemon || droppingPokemon) && loserTeam.length < currentTeamLength) {
-						const originalTeam = loserTeam;
-						loserTeam = this.getRandomTeamIncluding(loser, loserTeam);
-
-						this.debugLog(winner.name + " choices from " + loser.name + "'s team (random including " +
-							originalTeam.join(", ") + "): " + loserTeam.join(", "));
+			const requirements = this.getRoundTeamRequirements(winner.round!);
+			if (requirements.additionsThisRound || requirements.dropsThisRound || requirements.evolutionsThisRound) {
+				if (requirements.additionsThisRound) {
+					if (!loserTeam) {
+						loserTeam = this.getRandomTeam(loser);
+						this.debugLog(winner.name + " choices from " + loser.name + "'s team (random): " + loserTeam.join(", "));
 					} else {
-						this.debugLog(winner.name + " choices from " + loser.name + "'s team: " + loserTeam.join(", "));
+						if (loserTeam.length < requirements.currentTeamLength) {
+							const originalTeam = loserTeam;
+							loserTeam = this.getRandomTeamIncluding(loser, loserTeam);
+
+							this.debugLog(winner.name + " choices from " + loser.name + "'s team (random including " +
+								originalTeam.join(", ") + "): " + loserTeam.join(", "));
+						} else {
+							this.debugLog(winner.name + " choices from " + loser.name + "'s team: " + loserTeam.join(", "));
+						}
 					}
 				}
 
 				const teamChanges: ITeamChange = {
-					additions: additionsThisRound,
+					additions: requirements.additionsThisRound,
 					choices: loserTeam,
-					drops: dropsThisRound,
-					evolutions: this.evolutionsPerRound,
+					drops: requirements.dropsThisRound,
+					evolutions: requirements.evolutionsThisRound,
 				};
 
 				this.debugLog(winner.name + " team changes round " + winner.round + ": " + JSON.stringify(teamChanges));
 				winnerTeamChanges.push(teamChanges);
 
-				this.updatePossibleTeams(winner, loserTeam);
+				this.updatePossibleTeams(winner, loserTeam, teamChanges);
 
 				this.debugLog(winner.name + " new possible teams after win : " +
 					JSON.stringify(this.possibleTeams.get(winner)!.join(" | ")));
@@ -817,10 +821,17 @@ export abstract class BattleElimination extends ScriptedGame {
 			this.end();
 		}
 
+		if (!this.ended) {
+			this.updatePlayerOpponentHtml(winner);
+			this.updatePlayerOpponentHtml(loser);
+		}
+
 		return winnerTeamChanges;
 	}
 
 	updateMatches(onStart?: boolean): void {
+		const playersToHighlight: Player[] = [];
+
 		const nodes = this.getAvailableMatchNodes();
 		for (const node of nodes) {
 			if (this.availableMatchNodes.includes(node)) continue;
@@ -834,22 +845,18 @@ export abstract class BattleElimination extends ScriptedGame {
 			this.playerOpponents.set(player, opponent);
 			this.playerOpponents.set(opponent, player);
 
-			if (!onStart) {
-				const notificationTitle = "New " + this.name + " opponent!";
-				if (!player.eliminated) player.sendHighlight(notificationTitle);
-				if (!opponent.eliminated) opponent.sendHighlight(notificationTitle);
-			}
+			this.updatePlayerOpponentHtml(player);
+			this.updatePlayerOpponentHtml(opponent);
 
-			if (this.subRoom) {
-				if (!player.eliminated) this.updatePlayerHtmlPage(player);
-				if (!opponent.eliminated) this.updatePlayerHtmlPage(opponent);
-			} else {
+			if (!this.subRoom) {
 				let activityWarning = this.activityWarnTimeout;
 				if (!this.givenFirstRoundExtraTime.has(player) && !this.givenFirstRoundExtraTime.has(opponent)) {
 					if (this.firstRoundExtraTime) activityWarning += this.firstRoundExtraTime;
 				}
+
 				this.givenFirstRoundExtraTime.add(player);
 				this.givenFirstRoundExtraTime.add(opponent);
+
 				const warningTimeout = setTimeout(() => {
 					const reminderPM = "You still need to battle your new opponent for the " + this.name + " tournament in " +
 						this.room.title + "! Please send me the link to the battle or leave your pending challenge up. Make sure " +
@@ -865,10 +872,15 @@ export abstract class BattleElimination extends ScriptedGame {
 						} else {
 							this.checkChallenges(node, player, opponent);
 						}
-					}, this.activityDQTimeout + UPDATE_HTML_PAGE_DELAY);
+					}, this.activityDQTimeout);
 					this.activityTimers.set(node, dqTimeout);
-				}, activityWarning + UPDATE_HTML_PAGE_DELAY);
+				}, activityWarning);
 				this.activityTimers.set(node, warningTimeout);
+			}
+
+			if (!onStart) {
+				if (!player.eliminated) playersToHighlight.push(player);
+				if (!opponent.eliminated) playersToHighlight.push(opponent);
 			}
 		}
 
@@ -885,11 +897,14 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 
 		if (!this.subRoom) {
-			const oldBracketHtml = this.bracketHtml;
 			this.updateBracketHtml();
-			if (this.bracketHtml !== oldBracketHtml) {
-				this.updateHtmlPages();
-			}
+		}
+
+		this.updateHtmlPages();
+
+		const notificationTitle = "New " + this.name + " opponent!";
+		for (const player of playersToHighlight) {
+			player.sendHighlight(notificationTitle);
 		}
 	}
 
@@ -897,8 +912,8 @@ export abstract class BattleElimination extends ScriptedGame {
 		return pokemon.map(x => Dex.getPokemonIcon(Dex.getExistingPokemon(x)) + x);
 	}
 
-	getRulesHtml(): string {
-		let html = "<h3><u>Rules</u></h3><ul>";
+	setRulesHtml(): void {
+		let html = "<h3>Rules</h3><ul>";
 		html += "<li>Battles must be played in <b>" + this.battleFormat.name + "</b> (all Pokemon, moves, abilities, and items " +
 			"not banned can be used).</li>";
 		html += "<li>You can change Pokemon between formes and regional variants at any time.</li>";
@@ -909,200 +924,39 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 		html += "</ul>";
 
-		return html;
+		this.rulesHtml = html;
+
+		this.htmlPages.forEach(page => {
+			page.setRulesHtml(html);
+		});
 	}
 
-	getBracketHtml(): string {
-		return "<h3><u>" + (this.eliminationEnded ? "Final bracket" : "Bracket") + "</u></h3>" +
-			(this.bracketHtml || "The bracket will be created once the tournament starts.");
+	createHtmlPage(player: Player): BattleEliminationPage {
+		if (this.htmlPages.has(player)) return this.htmlPages.get(player)!;
+
+		const page = new (CommandParser.getGameHtmlPages().battleElimination)(this, player, this.htmlPageCommand, {
+			customBox: this.getPlayerOrPickedCustomBox(player),
+			gen: this.battleFormat.gen,
+			rerollCommand: REROLL_COMMAND,
+			rulesHtml: this.rulesHtml,
+			showBracket: !this.subRoom,
+			pageName: this.htmlPageGameName,
+		});
+
+		this.htmlPages.set(player, page);
+
+		return page;
 	}
 
-	getPlayerHtmlPage(player: Player, staffView?: boolean): string {
-		let html = "";
-
-		if (staffView) html += "<b>" + player.name + "'s view of the tournament:</b><br /><br />";
-
-		if (this.eliminationEnded) {
-			if (player === this.getFinalPlayer()) {
-				html += "<h3>Congratulations! You won the tournament.</h3>";
-			} else {
-				html += "<h3>The tournament has ended!</h3>";
-			}
-			html += "<br />";
-		} else {
-			html += this.getRulesHtml();
-		}
-
-		if (this.started && !this.eliminationEnded) {
-			if (player.eliminated) {
-				html += "<h3><u>Updates</u></h3>";
-
-				if (this.disqualifiedPlayers.has(player)) {
-					html += this.disqualifiedPlayers.get(player) + "<br /><br />";
-				} else {
-					html += "You were eliminated! ";
-				}
-
-				if (this.spectatorPlayers.has(player)) {
-					html += "You are currently still receiving updates for this tournament. " +
-						Client.getPmSelfButton(Config.commandCharacter + "stoptournamentupdates", "Stop updates");
-				} else {
-					html += "You will no longer receive updates for this tournament. " +
-						Client.getPmSelfButton(Config.commandCharacter + "resumetournamentupdates", "Resume updates");
-				}
-			} else {
-				html += "<h3><u>Opponent</u></h3>";
-				const opponent = this.playerOpponents.get(player);
-				if (opponent) {
-					html += "Your round " + player.round + " opponent is <strong class='username'><username>" + opponent.name +
-						"</username></strong>!<br /><br />";
-					if (!this.subRoom) {
-						html += "To challenge them, click their username, click \"Challenge\", select " +
-							this.battleFormat.name + " as the format, and select the team you built for this tournament. Once the " +
-							"battle starts, send <strong class='username'><username>" + Users.self.name + "</username></strong> the " +
-							"link or type <code>/invite " + Users.self.name + "</code> into the battle chat!<br /><br />";
-					}
-					html += "If " + opponent.name + " is offline or not accepting your challenge, you will be " +
-						"advanced automatically after some time!";
-				} else {
-					html += "Your next opponent has not been decided yet!";
-				}
-			}
-			html += "<br />";
-		}
-
-		html += "<h3><u>Your Team</u></h3>";
-		const pastTense = this.eliminationEnded || player.eliminated;
-		const starterPokemon = this.starterPokemon.get(player);
-		if (starterPokemon) {
-			if (this.usesCloakedPokemon) {
-				html += "<b>The Pokemon to protect in battle ";
-				if (pastTense) {
-					html += starterPokemon.length === 1 ? "was" : "were";
-				} else {
-					html += starterPokemon.length === 1 ? "is" : "are";
-				}
-				html += "</b>:<br />" + this.getPokemonIcons(starterPokemon).join("");
-				if (!this.eliminationEnded && starterPokemon.length < 6) {
-					html += "<br />You may add any Pokemon to fill your team as long as they are usable in " + this.battleFormat.name + ".";
-				}
-			} else {
-				html += (this.sharedTeams ? "The" : "Your") + " " +
-					(this.additionsPerRound || this.dropsPerRound || this.evolutionsPerRound ? "starting " : "") +
-					(this.startingTeamsLength === 1 ? "Pokemon" : "team") + " " + (pastTense ? "was" : "is") + ":";
-				html += "<br />" + this.getPokemonIcons(starterPokemon).join("");
-				if (this.canReroll && this.playerCanReroll(player)) {
-					html += "<br /><br />If you are not satisfied, you have 1 chance to reroll but you must keep whatever you receive! " +
-						Client.getPmSelfButton(Config.commandCharacter + "reroll", "Reroll Pokemon");
-				}
-			}
-		}
-
-		const teamChanges = this.teamChanges.get(player);
-		if (teamChanges) {
-			const rounds: string[] = [];
-			for (let i = 0; i < teamChanges.length; i++) {
-				const teamChange = teamChanges[i];
-				let roundChanges = '';
-				if (teamChange.drops) {
-					roundChanges += "<li>" + (pastTense ? "Removed" : "Remove") + " " + teamChange.drops + " " +
-						"member" + (teamChange.drops > 1 ? "s" : "") + " from your team</li>";
-				}
-
-				if (teamChange.additions) {
-					roundChanges += "<li>";
-					const addAll = teamChange.choices.length <= teamChange.additions;
-					if (addAll) {
-						roundChanges += (pastTense ? "Added" : "Add") + " the following to your team:";
-					} else {
-						roundChanges += (pastTense ? "Chose" : "Choose") + " " + teamChange.additions + " of the following " +
-							"to add to your team:";
-					}
-					roundChanges += "<br />" + Tools.joinList(this.getPokemonIcons(teamChange.choices), undefined, undefined,
-						addAll ? "and" : "or") + "</li>";
-				}
-
-				if (teamChange.evolutions) {
-					const amount = Math.abs(teamChange.evolutions);
-					roundChanges += "<li>" + (pastTense ? "Chose" : "Choose") + " " + amount + " " +
-						"member" + (amount > 1 ? "s" : "") + " of your " + (teamChange.additions || teamChange.drops ? "updated " : "") +
-						"team to " + (teamChange.evolutions >= 1 ? "evolve" : "de-volve") + "</li>";
-				}
-
-				if (roundChanges) {
-					rounds.push("Round " + (i + 1) + " result:<ul>" + roundChanges + "</ul>");
-				}
-			}
-
-			if (rounds.length) {
-				html += "<br /><br />";
-				if (!player.eliminated && !this.eliminationEnded && player.round === 2 && this.firstRoundByes.has(player)) {
-					html += "<b>NOTE</b>: you were given a first round bye so you must follow the team changes below for your first " +
-						"battle!<br /><br />";
-				}
-				html += rounds.join("");
-
-				if (!this.eliminationEnded) {
-					html += "<br /><b>Example valid team</b>:<br />" + Tools.joinList(this.getPokemonIcons(this.getRandomTeam(player)));
-				}
-			}
-		}
-
-		if (!this.subRoom) html += "<br />" + this.getBracketHtml();
-
-		return html;
-	}
-
-	updatePlayerHtmlPage(player: Player): void {
-		player.sendHtmlPage(this.getPlayerHtmlPage(player));
-	}
-
-	getSpectatorHtmlPage(user: User): string {
-		let html = "";
-
-		if (this.eliminationEnded) {
-			html += "<h3>The tournament has ended!</h3><hr />";
-		} else {
-			html += this.getRulesHtml();
-		}
-
-		if (this.started && !this.eliminationEnded) {
-			html += "<h3><u>Updates</u></h3>";
-			if (this.spectatorUsers.has(user.id)) {
-				html += "You are currently receiving updates for this tournament. " +
-					Client.getPmSelfButton(Config.commandCharacter + "stoptournamentupdates", "Stop updates");
-			} else {
-				html += "You will no longer receive updates for this tournament. " +
-					Client.getPmSelfButton(Config.commandCharacter + "resumetournamentupdates", "Resume updates");
-			}
-			html += "<br />";
-		}
-
-		html += this.getBracketHtml();
-
-		return html;
-	}
-
-	updateSpectatorHtmlPage(user: User): void {
-		this.room.sendHtmlPage(user, this.baseHtmlPageId, this.getHtmlPageWithHeader(this.getSpectatorHtmlPage(user)));
+	getHtmlPage(player: Player): BattleEliminationPage {
+		return this.htmlPages.get(player) || this.createHtmlPage(player);
 	}
 
 	updateHtmlPages(): void {
-		if (this.updateHtmlPagesTimeout) clearTimeout(this.updateHtmlPagesTimeout);
-
-		this.updateHtmlPagesTimeout = setTimeout(() => {
-			for (const i in this.players) {
-				if (this.players[i].eliminated && !this.spectatorPlayers.has(this.players[i])) continue;
-				this.updatePlayerHtmlPage(this.players[i]);
-			}
-
-			const users = Array.from(this.spectatorUsers.keys());
-			for (const id of users) {
-				if (id in this.players) continue;
-				const user = Users.get(id);
-				if (user) this.updateSpectatorHtmlPage(user);
-			}
-		}, UPDATE_HTML_PAGE_DELAY);
+		for (const i in this.players) {
+			if (this.players[i].eliminated && !this.spectatorPlayers.has(this.players[i])) continue;
+			this.sendHtmlPage(this.players[i]);
+		}
 	}
 
 	checkInactivePlayers(player: Player, opponent: Player): Player[] {
@@ -1204,15 +1058,17 @@ export abstract class BattleElimination extends ScriptedGame {
 	}
 
 	playerCanReroll(player: Player): boolean {
-		if (this.rerolls.has(player) || !this.starterPokemon.has(player) || this.playerBattleRooms.has(player) ||
+		if (!this.pokedex.length || this.rerolls.has(player) || !this.starterPokemon.has(player) || this.playerBattleRooms.has(player) ||
 			(player.round! > 1 && !(this.firstRoundByes.has(player) && player.round === 2))) return false;
 
 		return true;
 	}
 
 	giveStartingTeam(player: Player): void {
-		const team = this.getStartingTeam().filter(x => !!x);
+		const team: readonly string[] = this.getStartingTeam().filter(x => !!x);
 		if (team.length < this.startingTeamsLength) throw new Error("Out of Pokemon to give (" + player.name + ")");
+
+		this.starterPokemon.set(player, team);
 
 		const formeCombinations = Dex.getFormeCombinations(team, this.battleFormat.usablePokemon);
 
@@ -1223,7 +1079,7 @@ export abstract class BattleElimination extends ScriptedGame {
 			this.possibleTeams.set(player, formeCombinations);
 
 			if (this.firstRoundByeAdditions.has(player)) {
-				this.updatePossibleTeams(player, this.firstRoundByeAdditions.get(player)!);
+				this.updatePossibleTeams(player, this.firstRoundByeAdditions.get(player));
 			}
 
 			this.debugLog(player.name + " possible starting teams" + (this.rerolls.has(player) ? " (reroll)" : "") +
@@ -1231,9 +1087,138 @@ export abstract class BattleElimination extends ScriptedGame {
 				JSON.stringify(this.possibleTeams.get(player)!.join(" | ")));
 		}
 
-		this.starterPokemon.set(player, team);
+		this.updateTeamChangesHtml(player);
 
-		this.updatePlayerHtmlPage(player);
+		const htmlPage = this.getHtmlPage(player);
+		htmlPage.giveStartingTeam();
+		htmlPage.send();
+	}
+
+	updatePlayerOpponentHtml(player: Player): void {
+		let html = "";
+		if (this.started && !this.eliminationEnded) {
+			if (player.eliminated) {
+				html += "<h3>Updates</h3>";
+
+				if (this.disqualifiedPlayers.has(player)) {
+					html += this.disqualifiedPlayers.get(player) + "<br /><br />";
+				} else {
+					html += "You were eliminated! ";
+				}
+
+				if (this.spectatorPlayers.has(player)) {
+					html += "You are currently still receiving updates for this tournament. " +
+						Client.getPmSelfButton(Config.commandCharacter + "stoptournamentupdates", "Stop updates");
+				} else {
+					html += "You will no longer receive updates for this tournament. " +
+						Client.getPmSelfButton(Config.commandCharacter + "resumetournamentupdates", "Resume updates");
+				}
+			} else {
+				html += "<h3>Opponent</h3>";
+				const opponent = this.playerOpponents.get(player);
+				if (opponent) {
+					html += "Your round " + player.round + " opponent is <strong class='username'><username>" + opponent.name +
+						"</username></strong>!";
+					if (!this.subRoom) {
+						html += "<br /><br />To challenge them, click their username, click \"Challenge\", select " +
+							this.battleFormat.name + " as the format, and select the team you built for this tournament. Once the " +
+							"battle starts, send <strong class='username'><username>" + Users.self.name + "</username></strong> the " +
+							"link or type <code>/invite " + Users.self.name + "</code> into the battle chat!";
+					}
+					html += "<br /><br />If " + opponent.name + " is offline or not accepting your challenge, you will be " +
+						"advanced automatically after some time!";
+				} else {
+					html += "Your next opponent has not been decided yet!";
+				}
+			}
+		}
+
+		const htmlPage = this.getHtmlPage(player);
+		htmlPage.setOpponentHtml(html);
+	}
+
+	updateTeamChangesHtml(player: Player): void {
+		let html = "";
+		const pastTense = this.eliminationEnded || player.eliminated;
+		const starterPokemon = this.starterPokemon.get(player);
+		if (starterPokemon) {
+			html += "<h3>Your Team</h3>";
+
+			if (this.usesCloakedPokemon) {
+				html += "<b>The Pokemon to protect in battle ";
+				if (pastTense) {
+					html += starterPokemon.length === 1 ? "was" : "were";
+				} else {
+					html += starterPokemon.length === 1 ? "is" : "are";
+				}
+				html += "</b>:<br />" + this.getPokemonIcons(starterPokemon).join("");
+				if (!this.eliminationEnded && starterPokemon.length < 6) {
+					html += "<br />You may add any Pokemon to fill your team as long as they are usable in " + this.battleFormat.name + ".";
+				}
+			} else {
+				html += (this.sharedTeams ? "The" : "Your") + " " +
+					(this.additionsPerRound || this.dropsPerRound || this.evolutionsPerRound ? "starting " : "") +
+					(this.startingTeamsLength === 1 ? "Pokemon" : "team") + " " + (pastTense ? "was" : "is") + ":";
+				html += "<br />" + this.getPokemonIcons(starterPokemon).join("");
+				if (this.canReroll && this.playerCanReroll(player)) {
+					html += "<br /><br />If you are not satisfied, you have 1 chance to reroll but you must keep whatever you receive! " +
+						Client.getPmSelfButton(Config.commandCharacter + "reroll", "Reroll Pokemon");
+				}
+			}
+		}
+
+		const teamChanges = this.teamChanges.get(player);
+		if (teamChanges) {
+			const rounds: string[] = [];
+			for (let i = 0; i < teamChanges.length; i++) {
+				const teamChange = teamChanges[i];
+				let roundChanges = '';
+				if (teamChange.drops) {
+					roundChanges += "<li>" + (player.eliminated ? "Removed" : "Remove") + " " + teamChange.drops + " " +
+						"member" + (teamChange.drops > 1 ? "s" : "") + " from your team</li>";
+				}
+
+				if (teamChange.additions) {
+					roundChanges += "<li>";
+					const addAll = teamChange.choices!.length <= teamChange.additions;
+					if (addAll) {
+						roundChanges += (player.eliminated ? "Added" : "Add") + " the following to your team:";
+					} else {
+						roundChanges += (player.eliminated ? "Chose" : "Choose") + " " + teamChange.additions + " of the following " +
+							"to add to your team:";
+					}
+					roundChanges += "<br />" + Tools.joinList(this.getPokemonIcons(teamChange.choices!), undefined, undefined,
+						addAll ? "and" : "or") + "</li>";
+				}
+
+				if (teamChange.evolutions) {
+					const amount = Math.abs(teamChange.evolutions);
+					roundChanges += "<li>" + (player.eliminated ? "Chose" : "Choose") + " " + amount + " " +
+						"member" + (amount > 1 ? "s" : "") + " of your " + (teamChange.additions || teamChange.drops ? "updated " : "") +
+						"team to " + (teamChange.evolutions >= 1 ? "evolve" : "de-volve") + "</li>";
+				}
+
+				if (roundChanges) {
+					rounds.push("Round " + (i + 1) + " result:<ul>" + roundChanges + "</ul>");
+				}
+			}
+
+			if (rounds.length) {
+				html += "<br /><br />";
+				if (!player.eliminated && !this.eliminationEnded && player.round === 2 && this.firstRoundByes.has(player)) {
+					html += "<b>NOTE</b>: you were given a first round bye so you must follow the team changes below for your first " +
+						"battle!<br /><br />";
+				}
+				html += rounds.join("");
+
+				if (!this.eliminationEnded) {
+					html += "<br /><b>Example valid team</b>:<br />" + Tools.joinList(this.getPokemonIcons(this.getRandomTeam(player)));
+				}
+			}
+		}
+
+		const htmlPage = this.getHtmlPage(player);
+		htmlPage.setAllTeamChangesHtml(html);
 	}
 
 	getPossibleTeamsOptions(): IGetPossibleTeamsOptions {
@@ -1250,8 +1235,15 @@ export abstract class BattleElimination extends ScriptedGame {
 		};
 	}
 
-	updatePossibleTeams(player: Player, additions: string[]): void {
-		this.possibleTeams.set(player, Dex.getPossibleTeams(this.possibleTeams.get(player)!, additions, this.getPossibleTeamsOptions()));
+	updatePossibleTeams(player: Player, pool: string[] | undefined, roundOptions?: Partial<IGetPossibleTeamsOptions>): void {
+		const formatDefaultOptions = this.getPossibleTeamsOptions();
+		const options = roundOptions ? Object.assign(formatDefaultOptions, roundOptions) : formatDefaultOptions;
+
+		if (!options.additions) options.requiredAddition = false;
+		if (!options.drops) options.requiredDrop = false;
+		if (!options.evolutions) options.requiredEvolution = false;
+
+		this.possibleTeams.set(player, Dex.getPossibleTeams(this.possibleTeams.get(player)!, pool, options));
 	}
 
 	getSignupsHtml(): string {
@@ -1292,25 +1284,29 @@ export abstract class BattleElimination extends ScriptedGame {
 			const colorKeys = this.shuffle(Object.keys(colors));
 			this.color = colors[colorKeys[0]];
 			colorKeys.shift();
-			pokedex = this.createPokedex();
+			pokedex = this.createBasePokedex();
+
 			while (this.getMaxPlayers(pokedex.length) < minimumPlayers) {
 				if (!colorKeys.length) throw new Error("No color has at least " + minimumPokemon + " Pokemon");
 				this.color = colors[colorKeys[0]];
 				colorKeys.shift();
-				pokedex = this.createPokedex();
+				pokedex = this.createBasePokedex();
 			}
+
 			this.htmlPageGameName = "Mono-" + this.color + " " + this.baseHtmlPageGameName;
 		} else if (this.monoType) {
 			const types = this.shuffle(Dex.getData().typeKeys);
 			this.type = Dex.getExistingType(types[0]).name;
 			types.shift();
-			pokedex = this.createPokedex();
+			pokedex = this.createBasePokedex();
+
 			while (this.getMaxPlayers(pokedex.length) < minimumPlayers) {
 				if (!types.length) throw new Error("No type has at least " + minimumPokemon + " Pokemon");
 				this.type = Dex.getExistingType(types[0]).name;
 				types.shift();
-				pokedex = this.createPokedex();
+				pokedex = this.createBasePokedex();
 			}
+
 			this.htmlPageGameName = "Mono-" + this.type + " " + this.baseHtmlPageGameName;
 		} else if (this.monoRegion) {
 			const currentGen = Dex.getGen();
@@ -1322,12 +1318,13 @@ export abstract class BattleElimination extends ScriptedGame {
 
 			this.gen = gens[0];
 			gens.shift();
-			pokedex = this.createPokedex();
+			pokedex = this.createBasePokedex();
+
 			while (this.getMaxPlayers(pokedex.length) < minimumPlayers) {
 				if (!gens.length) throw new Error("No gen has at least " + minimumPokemon + " Pokemon");
 				this.gen = gens[0];
 				gens.shift();
-				pokedex = this.createPokedex();
+				pokedex = this.createBasePokedex();
 			}
 
 			let region;
@@ -1347,11 +1344,13 @@ export abstract class BattleElimination extends ScriptedGame {
 				region = 'Alola';
 			} else if (this.gen === 8) {
 				region = 'Galar';
+			} else if (this.gen === 9) {
+				region = 'Paldea';
 			}
 
 			this.htmlPageGameName = "Mono-" + region + " " + this.baseHtmlPageGameName;
 		} else {
-			pokedex = this.createPokedex();
+			pokedex = this.createBasePokedex();
 			if (this.getMaxPlayers(pokedex.length) < minimumPlayers) {
 				throw new Error(this.battleFormat.name + " does not have at least " + minimumPokemon + " Pokemon");
 			}
@@ -1359,15 +1358,11 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 
 		this.pokedex = this.shuffle(pokedex);
-
-		// limit pokedex size for custom rules
-		const maxPokemon = Math.max(this.getMinimumPokedexSizeForPlayers(this.maxPlayers - 1),
-			this.getMinimumPokedexSizeForPlayers(this.maxPlayers));
-		if (this.pokedex.length > maxPokemon) this.pokedex = this.pokedex.slice(0, maxPokemon);
 	}
 
 	onSignups(): void {
 		this.generatePokedex();
+
 		this.htmlPageHeader = "<h2>" + this.room.title + "'s " + this.htmlPageGameName + "</h2><hr />";
 
 		const maxPlayers = this.getMaxPlayers(this.pokedex.length);
@@ -1375,7 +1370,8 @@ export abstract class BattleElimination extends ScriptedGame {
 
 		this.playerCap = this.maxPlayers;
 
-		this.startAdvertisements();
+		if (!this.creatingSubRoom) this.startAdvertisements();
+
 		this.room.notifyRank("all", this.room.title + " " + Users.self.name + " tournament", this.name,
 			Users.self.name + " is hosting a tournament");
 	}
@@ -1414,10 +1410,7 @@ export abstract class BattleElimination extends ScriptedGame {
 		if (this.playerCount < this.minPlayers) {
 			this.sayUhtmlAuto(this.uhtmlBaseName + '-signups', "<b>The " + this.name + " tournament is cancelled due to a lack of players" +
 				"</b>");
-			for (const i in this.players) {
-				if (this.players[i].eliminated) continue;
-				this.players[i].sendHtmlPage("<h3>The tournament was cancelled due to a lack of players!</h3>");
-			}
+			this.dontAutoCloseHtmlPages = false;
 			this.deallocate(true);
 			return;
 		}
@@ -1436,39 +1429,36 @@ export abstract class BattleElimination extends ScriptedGame {
 
 		this.canRejoin = false; // disable rejoins to prevent remainingPlayers from being wrong
 
-		const uhtmlName = this.uhtmlBaseName + '-signups';
-		const html = this.getSignupsHtml();
-		this.onUhtml(uhtmlName, html, () => {
-			if (this.canReroll) {
-				let text = "";
-				if (!this.subRoom) {
-					text += "The " + this.name + " tournament is about to start! ";
-				}
-				text += "There are " + Tools.toDurationString(REROLL_START_DELAY) + " left to PM me the command ``" +
-					Config.commandCharacter + REROLL_COMMAND + "`` to get a new " +
-					(this.startingTeamsLength === 1 ? "starter" : "team") + " (cannot be undone).";
+		this.sayUhtmlChange(this.uhtmlBaseName + '-signups', this.getSignupsHtml());
 
-				if (this.subRoom) {
-					this.subRoom.say(text);
-				} else {
-					this.say(text);
-				}
-
-				if (this.subRoom) {
-					this.startElimination();
-
-					this.timeout = setTimeout(() => {
-						this.canReroll = false;
-					}, REROLL_START_DELAY);
-				} else {
-					this.timeout = setTimeout(() => this.startElimination(), REROLL_START_DELAY);
-				}
-			} else {
-				this.startElimination();
+		if (this.canReroll) {
+			let text = "";
+			if (!this.subRoom) {
+				text += "The " + this.name + " tournament is about to start! ";
 			}
-		});
+			text += "There are " + Tools.toDurationString(REROLL_START_DELAY) + " left to PM me the command ``" +
+				Config.commandCharacter + REROLL_COMMAND + "`` to get a new " +
+				(this.startingTeamsLength === 1 ? "starter" : "team") + " (cannot be undone).";
 
-		this.sayUhtmlChange(uhtmlName, html);
+			if (this.subRoom) {
+				this.subRoom.say(text);
+			} else {
+				this.say(text);
+			}
+
+			if (this.subRoom) {
+				this.startElimination();
+
+				this.setTimeout(() => {
+					this.canReroll = false;
+					this.updateHtmlPages();
+				}, REROLL_START_DELAY);
+			} else {
+				this.setTimeout(() => this.startElimination(), REROLL_START_DELAY);
+			}
+		} else {
+			this.startElimination();
+		}
 	}
 
 	startElimination(): void {
@@ -1478,11 +1468,15 @@ export abstract class BattleElimination extends ScriptedGame {
 			Tools.toDurationString(this.firstRoundTime) + " to build your team and start the first battle.";
 		if (!this.subRoom) {
 			this.canReroll = false;
+			this.updateHtmlPages();
 
 			html += " Please refer to the tournament page on the left for your opponents.";
 			html += "<br /><br /><b>Remember that you must PM " + Users.self.name + " the link to each battle</b>! If you cannot copy " +
 			"the link, type <code>/invite " + Users.self.name + "</code> into the battle chat.";
 		}
+
+		html += "<br /><br />If you accidentally close your tournament page, PM " + Users.self.name + " with the command <code>" +
+			Config.commandCharacter + TOUR_PAGE_COMMAND + "</code> to re-open it!";
 
 		if (this.subRoom) {
 			this.subRoom.sayHtml(html);
@@ -1505,6 +1499,8 @@ export abstract class BattleElimination extends ScriptedGame {
 	}
 
 	onAddPlayer(player: Player): boolean {
+		this.createHtmlPage(player);
+
 		if (!this.subRoom) {
 			const database = Storage.getDatabase(this.room);
 			if (database.tournamentGameBanlist && player.id in database.tournamentGameBanlist) {
@@ -1551,7 +1547,11 @@ export abstract class BattleElimination extends ScriptedGame {
 				}, this.getSignupsUpdateDelay());
 			}
 
+			this.debugLog("Pokedex before giving " + player.name + " their starting team: " + this.pokedex.join(", "));
+
 			this.giveStartingTeam(player);
+
+			this.debugLog("Pokedex after giving " + player.name + " their starting team: " + this.pokedex.join(", "));
 
 			if (this.canReroll && this.playerCap && this.playerCount >= this.playerCap) {
 				player.say("You have " + Tools.toDurationString(REROLL_START_DELAY) + " to decide whether you want to use ``" +
@@ -1563,7 +1563,9 @@ export abstract class BattleElimination extends ScriptedGame {
 	}
 
 	onAddExistingPlayer(player: Player): void {
-		if (!this.started) this.updatePlayerHtmlPage(player);
+		if (!this.started) {
+			this.sendHtmlPage(player, true);
+		}
 	}
 
 	onRemovePlayer(player: Player, notAutoconfirmed?: boolean): void {
@@ -1941,13 +1943,15 @@ export abstract class BattleElimination extends ScriptedGame {
 		this.debugLog(winner.name + " won their battle against " + loser.name);
 		const teamChanges = this.setMatchResult(node, winner, loserTeam);
 
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 		if (!this.ended) {
 			this.teamChanges.set(winner, (this.teamChanges.get(winner) || []).concat(teamChanges));
-			if (this.subRoom) {
-				this.updatePlayerHtmlPage(winner);
-				this.updatePlayerHtmlPage(loser);
-			}
+			this.updateTeamChangesHtml(winner);
+
+			const htmlPage = this.getHtmlPage(winner);
+			htmlPage.syncRound();
+			htmlPage.send();
+
+			this.sendHtmlPage(loser);
 
 			this.updateMatches();
 		}
@@ -2006,12 +2010,6 @@ export abstract class BattleElimination extends ScriptedGame {
 			this.advertisementInterval = undefined;
 		}
 
-		if (this.updateHtmlPagesTimeout) {
-			clearTimeout(this.updateHtmlPagesTimeout);
-			// @ts-expect-error
-			this.updateHtmlPagesTimeout = undefined;
-		}
-
 		if (this.treeRoot) {
 			this.treeRoot.traverse(node => {
 				this.clearNodeTimers(node);
@@ -2048,8 +2046,9 @@ export abstract class BattleElimination extends ScriptedGame {
 	onEnd(): void {
 		if (!this.treeRoot || !this.eliminationEnded) return;
 
-		this.updateBracketHtml();
-		this.updateHtmlPages();
+		if (!this.subRoom) {
+			this.updateBracketHtml();
+		}
 
 		const now = Date.now();
 		const database = Storage.getDatabase(this.room);
@@ -2128,6 +2127,7 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 	}
 
+	getGameCustomRules?(): string[];
 	meetsStarterCriteria?(pokemon: IPokemon): boolean;
 	meetsEvolutionCriteria?(pokemon: IPokemon): boolean;
 }
@@ -2204,14 +2204,14 @@ const commands: GameCommandDefinitions<BattleElimination> = {
 				return false;
 			}
 
-			this.updatePlayerHtmlPage(player);
+			this.sendHtmlPage(player, true);
 			return true;
 		},
 		pmOnly: true,
 		signupsGameCommand: true,
 		aliases: ['team'],
 	},
-	tournamentpage: {
+	[TOUR_PAGE_COMMAND]: {
 		command(target, room, user) {
 			const id = Tools.toId(target);
 			if (id) {
@@ -2226,22 +2226,27 @@ const commands: GameCommandDefinitions<BattleElimination> = {
 					return false;
 				}
 
-				this.room.sendHtmlPage(user, this.baseHtmlPageId + "-" + id,
-					this.getHtmlPageWithHeader(this.getPlayerHtmlPage(this.players[id], true)));
-			} else if (user.id in this.players) {
-				this.updatePlayerHtmlPage(this.players[user.id]);
-			} else {
-				if (this.subRoom) {
-					user.say("To spectate the current tournament, join <<" + this.subRoom.id + ">>!");
+				const htmlPage = this.htmlPages.get(this.players[id]);
+				if (!htmlPage) {
+					user.say("'" + target.trim() + "' has not received a tournament page yet.");
 					return false;
 				}
 
-				this.spectatorUsers.add(user.id);
-				this.updateSpectatorHtmlPage(user);
+				const showAllTeamChanges = htmlPage.showAllTeamChanges;
+
+				htmlPage.showAllTeamChanges = true;
+				htmlPage.staffUserView = true;
+				this.getPmRoom().sendHtmlPage(user, this.baseHtmlPageId + "-" + id,
+					this.players[id].name + "'s tournament page:<br /><br />" + htmlPage.render());
+
+				htmlPage.showAllTeamChanges = showAllTeamChanges;
+				htmlPage.staffUserView = false;
+			} else if (user.id in this.players) {
+				this.sendHtmlPage(this.players[user.id], true);
 			}
 			return true;
 		},
-		aliases: ['tourpage', 'tournamenttab', 'tourtab'],
+		aliases: ['tournamentpage', 'tournamenttab', 'tourtab'],
 		pmOnly: true,
 		eliminatedGameCommand: true,
 		spectatorGameCommand: true,
@@ -2262,15 +2267,32 @@ const commands: GameCommandDefinitions<BattleElimination> = {
 			if (!starterPokemon) return false;
 
 			this.debugLog("Rerolling starter for " + player.name);
+
+			this.debugLog("Pokedex before adding " + player.name + "'s original starting team: " + this.pokedex.join(", "));
+
 			for (const pokemon of starterPokemon) {
 				this.pokedex.push(pokemon);
 			}
 
+			this.debugLog("Pokedex after adding " + player.name + "'s original starting team: " + this.pokedex.join(", "));
+
 			this.rerolls.set(player, true);
 			this.giveStartingTeam(player);
+
+			this.debugLog("Pokedex after giving " + player.name + " their rerolled starting team: " + this.pokedex.join(", "));
+
 			return true;
 		},
 		pmOnly: true,
+		signupsGameCommand: true,
+	},
+	[HTML_PAGE_COMMAND]: {
+		command(target, room, user) {
+			this.runHtmlPageCommand(target, user);
+			return true;
+		},
+		eliminatedGameCommand: true,
+		pmGameCommand: true,
 		signupsGameCommand: true,
 	},
 	resumetournamentupdates: {
@@ -2278,36 +2300,28 @@ const commands: GameCommandDefinitions<BattleElimination> = {
 			if (user.id in this.players) {
 				if (!this.players[user.id].eliminated || this.spectatorPlayers.has(this.players[user.id])) return false;
 				this.spectatorPlayers.add(this.players[user.id]);
-				this.updatePlayerHtmlPage(this.players[user.id]);
-			} else {
-				if (this.spectatorUsers.has(user.id)) return false;
-				this.spectatorUsers.add(user.id);
-				this.updateSpectatorHtmlPage(user);
+				this.updatePlayerOpponentHtml(this.players[user.id]);
+				this.sendHtmlPage(this.players[user.id]);
 			}
 			return true;
 		},
 		aliases: ['spectatetournament', 'spectatetour'],
 		pmOnly: true,
 		eliminatedGameCommand: true,
-		spectatorGameCommand: true,
 	},
 	stoptournamentupdates: {
 		command(target, room, user) {
 			if (user.id in this.players) {
 				if (!this.players[user.id].eliminated || !this.spectatorPlayers.has(this.players[user.id])) return false;
 				this.spectatorPlayers.delete(this.players[user.id]);
-				this.updatePlayerHtmlPage(this.players[user.id]);
-			} else {
-				if (!this.spectatorUsers.has(user.id)) return false;
-				this.spectatorUsers.delete(user.id);
-				this.updateSpectatorHtmlPage(user);
+				this.updatePlayerOpponentHtml(this.players[user.id]);
+				this.sendHtmlPage(this.players[user.id]);
 			}
 			return true;
 		},
 		aliases: ['unspectatetournament', 'unspectatetour'],
 		pmOnly: true,
 		eliminatedGameCommand: true,
-		spectatorGameCommand: true,
 	},
 };
 
@@ -2334,7 +2348,7 @@ const tests: GameFileTests<BattleElimination> = {
 			assert(game.pokedex.length);
 			addPlayers(game, game.maxPlayers);
 			assert(game.started);
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 		},
 	},
 	'should generate a bracket - 4 players': {
@@ -2524,7 +2538,7 @@ const tests: GameFileTests<BattleElimination> = {
 			game.canReroll = false;
 			addPlayers(game, 4);
 			game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assert(!game.firstRoundByes.size);
 
@@ -2552,7 +2566,7 @@ const tests: GameFileTests<BattleElimination> = {
 			game.canReroll = false;
 			addPlayers(game, 5);
 			game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assertStrictEqual(game.firstRoundByes.size, 3);
 			if (game.additionsPerRound || game.dropsPerRound || game.evolutionsPerRound) {
@@ -2592,7 +2606,7 @@ const tests: GameFileTests<BattleElimination> = {
 			game.canReroll = false;
 			addPlayers(game, 6);
 			game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assertStrictEqual(game.firstRoundByes.size, 2);
 			if (game.additionsPerRound || game.dropsPerRound || game.evolutionsPerRound) {
@@ -2636,7 +2650,7 @@ const tests: GameFileTests<BattleElimination> = {
 			game.canReroll = false;
 			addPlayers(game, 7);
 			game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assertStrictEqual(game.firstRoundByes.size, 1);
 			if (game.additionsPerRound || game.dropsPerRound || game.evolutionsPerRound) {
@@ -2680,7 +2694,7 @@ const tests: GameFileTests<BattleElimination> = {
 			game.canReroll = false;
 			addPlayers(game, 8);
 			if (!game.started) game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assert(!game.firstRoundByes.size);
 
@@ -2714,66 +2728,138 @@ const tests: GameFileTests<BattleElimination> = {
 	'should give team changes until players have a full team - additionsPerRound': {
 		test(game) {
 			this.timeout(15000);
-			if (!game.additionsPerRound || game.dropsPerRound || game.maxPlayers < 64) return;
+			if (!game.additionsPerRound || game.dropsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;
 
 			disableTournamentProperties(game);
 
 			game.canReroll = false;
-			addPlayers(game, 64);
+			addPlayers(game, game.maxPlayers);
 			if (!game.started) game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assert(!game.firstRoundByes.size);
 
 			let matchesByRound = game.getMatchesByRound();
 			const matchRounds = Object.keys(matchesByRound).sort();
-			for (let i = 1; i <= ((6 - game.startingTeamsLength) / game.additionsPerRound); i++) {
+			const iterations = ((6 - game.startingTeamsLength) / game.additionsPerRound) + 1;
+			for (let i = 1; i <= iterations; i++) {
 				const round = matchRounds[i - 1];
 				if (!round) break;
+
 				const player = matchesByRound[round][0].children![0].user!;
 				for (const match of matchesByRound[round]) {
 					const winner = match.children![0].user!;
+					let teamChanges = game.teamChanges.get(winner) || [];
+					const startIndex = teamChanges.length;
+
 					game.removePlayer(match.children![1].user!.name);
-					if (game.additionsPerRound || game.dropsPerRound || game.evolutionsPerRound) {
-						assert(game.possibleTeams.get(winner)!.length);
+					if (game.ended) break;
+
+					teamChanges = game.teamChanges.get(winner)!;
+					for (let j = startIndex; j < teamChanges.length; j++) {
+						assert(teamChanges[j].additions >= 0 && teamChanges[j].additions <= game.additionsPerRound);
+						assert(teamChanges[j].drops === 0);
 					}
+
+					assert(game.possibleTeams.get(winner)!.length);
 				}
 
-				assertStrictEqual(game.teamChanges.get(player)!.length, i);
-				matchesByRound = game.getMatchesByRound();
+				if (!game.ended) {
+					assertStrictEqual(game.teamChanges.get(player)!.length, i);
+					matchesByRound = game.getMatchesByRound();
+				}
 			}
 		},
 	},
 	'should give team changes until players have a full team - dropsPerRound': {
 		test(game) {
 			this.timeout(15000);
-			if (!game.dropsPerRound || game.additionsPerRound || game.maxPlayers < 64) return;
+			if (!game.dropsPerRound || game.additionsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;
 
 			disableTournamentProperties(game);
 
 			game.canReroll = false;
-			addPlayers(game, 64);
+			addPlayers(game, game.maxPlayers);
 			if (!game.started) game.start();
-			game.startElimination();
+			if (!game.eliminationStarted) game.startElimination();
 
 			assert(!game.firstRoundByes.size);
 
 			let matchesByRound = game.getMatchesByRound();
 			const matchRounds = Object.keys(matchesByRound).sort();
-			for (let i = 1; i <= ((game.startingTeamsLength - 1) / game.additionsPerRound); i++) {
+			const iterations = ((game.startingTeamsLength - 1) / game.dropsPerRound) + 1;
+			for (let i = 1; i <= iterations; i++) {
 				const round = matchRounds[i - 1];
 				if (!round) break;
+
 				const player = matchesByRound[round][0].children![0].user!;
 				for (const match of matchesByRound[round]) {
 					const winner = match.children![0].user!;
+					let teamChanges = game.teamChanges.get(winner) || [];
+					const startIndex = teamChanges.length;
+
 					game.removePlayer(match.children![1].user!.name);
-					if (game.additionsPerRound || game.dropsPerRound || game.evolutionsPerRound) {
-						assert(game.possibleTeams.get(winner)!.length);
+					if (game.ended) break;
+
+					teamChanges = game.teamChanges.get(winner)!;
+					for (let j = startIndex; j < teamChanges.length; j++) {
+						assert(teamChanges[j].drops >= 0 && teamChanges[j].drops <= game.dropsPerRound);
+						assert(teamChanges[j].additions === 0);
 					}
+
+					assert(game.possibleTeams.get(winner)!.length);
 				}
 
-				assertStrictEqual(game.teamChanges.get(player)!.length, i);
-				matchesByRound = game.getMatchesByRound();
+				if (!game.ended) {
+					assertStrictEqual(game.teamChanges.get(player)!.length, i);
+					matchesByRound = game.getMatchesByRound();
+				}
+			}
+		},
+	},
+	'should give team changes until players have a full team - additionsPerRound and dropsPerRound': {
+		test(game) {
+			this.timeout(15000);
+			if (!game.additionsPerRound || !game.dropsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;
+
+			disableTournamentProperties(game);
+
+			game.canReroll = false;
+			addPlayers(game, game.maxPlayers);
+			if (!game.started) game.start();
+			if (!game.eliminationStarted) game.startElimination();
+
+			assert(!game.firstRoundByes.size);
+
+			let matchesByRound = game.getMatchesByRound();
+			const matchRounds = Object.keys(matchesByRound).sort();
+			const iterations = ((6 - game.startingTeamsLength) / game.additionsPerRound) + 1;
+			for (let i = 1; i <= iterations; i++) {
+				const round = matchRounds[i - 1];
+				if (!round) break;
+
+				const player = matchesByRound[round][0].children![0].user!;
+				for (const match of matchesByRound[round]) {
+					const winner = match.children![0].user!;
+					let teamChanges = game.teamChanges.get(winner) || [];
+					const startIndex = teamChanges.length;
+
+					game.removePlayer(match.children![1].user!.name);
+					if (game.ended) break;
+
+					teamChanges = game.teamChanges.get(winner)!;
+					for (let j = startIndex; j < teamChanges.length; j++) {
+						assert(teamChanges[j].additions >= 0 && teamChanges[j].additions <= game.additionsPerRound);
+						assert(teamChanges[j].drops >= 0 && teamChanges[j].drops <= game.dropsPerRound);
+					}
+
+					assert(game.possibleTeams.get(winner)!.length);
+				}
+
+				if (!game.ended) {
+					assertStrictEqual(game.teamChanges.get(player)!.length, i);
+					matchesByRound = game.getMatchesByRound();
+				}
 			}
 		},
 	},

@@ -8,7 +8,7 @@ import type { TrainerSpriteId } from "./types/dex";
 import type { IFormat } from "./types/pokemon-showdown";
 import type { IPastTournament, LeaderboardType } from "./types/storage";
 import type {
-	IClientTournamentNode, IOfficialTournament, ITournamentCreateJson, ITournamentTimerData, ITreeRootPlaces,
+	IClientTournamentNode, ICreateTournamentOptions, IOfficialTournament, ITournamentCreateJson, ITournamentTimerData, ITreeRootPlaces,
 	TournamentPlace
 } from "./types/tournaments";
 import type { User } from "./users";
@@ -59,6 +59,7 @@ export class Tournaments {
 		const currentYear = date.getFullYear();
 		const currentMonth = date.getMonth() + 1;
 		const currentDate = date.getDate();
+		const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
 
 		const years = Object.keys(database.officialTournamentSchedule.years).map(x => parseInt(x)).sort((a, b) => a - b);
 		for (const year of years) {
@@ -80,7 +81,7 @@ export class Tournaments {
 				for (const day of days) {
 					if (!loadAll && checkCurrentDate && day < currentDate) continue;
 
-					const scheduled = (schedule.months[month].days[day].format || DEFAULT_OFFICIAL_TOURNAMENT).trim();
+					const scheduled = (schedule.months[month].days[day]!.format || DEFAULT_OFFICIAL_TOURNAMENT).trim();
 					let formatId = scheduled;
 					let customRules: string[] = [];
 					if (scheduled.includes('@@@')) {
@@ -100,6 +101,8 @@ export class Tournaments {
 						const format = this.getFormat(formatId, undefined, room);
 						if (!format) throw new Error("No format returned for '" + formatId + "'");
 
+						if (format.customRules) customRules = customRules.concat(format.customRules);
+
 						const validatedFormatId = Dex.validateFormat(Dex.joinNameAndCustomRules(format,
 							Dex.resolveCustomRuleAliases(customRules)));
 
@@ -108,10 +111,18 @@ export class Tournaments {
 							throw new Error("Custom rules not added");
 						}
 
-						schedule.months[month].days[day].format = validatedFormatId;
+						if (schedule.months[month].days[day]!.invalidFormat) schedule.months[month].days[day]!.invalidFormat = false;
 					} catch (e) {
-						console.log("Invalid format scheduled for " + month + "/" + day + " in " + room + ": " + (e as Error).message);
-						schedule.months[month].days[day].format = Dex.getExistingFormat(DEFAULT_OFFICIAL_TOURNAMENT).id;
+						const errorMessage = "Invalid format scheduled for " + month + "/" + day + " in " + room + ": " +
+							(e as Error).message;
+						console.log(errorMessage);
+
+						if (month === currentMonth || month === nextMonth) {
+							const possibleRoom = Rooms.get(room);
+							if (possibleRoom) possibleRoom.modnote(errorMessage);
+						}
+
+						schedule.months[month].days[day]!.invalidFormat = true;
 					}
 				}
 			}
@@ -119,7 +130,6 @@ export class Tournaments {
 
 		if (!monthsAndYears.length) return;
 
-		// const months = Object.keys(schedule.months).map(x => parseInt(x));
 		let monthAndYear = monthsAndYears[0];
 		let month = monthAndYear.month;
 		monthsAndYears.shift();
@@ -127,17 +137,19 @@ export class Tournaments {
 		let schedule = database.officialTournamentSchedule.years[monthAndYear.year];
 		let scheduleDays = schedule.months[month].days;
 		let day = 1;
-		let scheduleDay = scheduleDays[day].times[0][0] > scheduleDays[day].times[1][0] ? 2 : 1;
+		let scheduleDay = scheduleDays[day] && scheduleDays[day]!.times[0][0] > scheduleDays[day]!.times[1][0] ? 2 : 1;
 		date.setMonth(month - 1, day);
 		date.setDate(day);
 		date.setFullYear(monthAndYear.year);
 		let lastDayOfMonth = Tools.getLastDayOfMonth(date);
 
-		const rolloverDay = (): void => {
+		const rolloverDay = (): boolean => {
 			scheduleDay++;
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 			if (!scheduleDays[scheduleDay]) {
 				if (monthsAndYears.length) {
+					// incomplete schedule
+					if (!(monthsAndYears[0].month in schedule.months)) return false;
+
 					scheduleDays = schedule.months[monthsAndYears[0].month].days;
 					scheduleDay = 1;
 				} else {
@@ -167,23 +179,28 @@ export class Tournaments {
 			}
 
 			date.setDate(day);
+			return true;
 		};
 
 		// month is eventually undefined due to rolloverDay()
+		outer:
 		while (month) {
-			const format = scheduleDays[scheduleDay].format || DEFAULT_OFFICIAL_TOURNAMENT;
+			const format = !scheduleDays[scheduleDay]!.format || scheduleDays[scheduleDay]!.invalidFormat ? DEFAULT_OFFICIAL_TOURNAMENT :
+				scheduleDays[scheduleDay]!.format;
 			let rolledOverDay = false;
-			for (let i = 0; i < scheduleDays[scheduleDay].times.length; i++) {
-				if (i > 0 && scheduleDays[scheduleDay].times[i][0] < scheduleDays[scheduleDay].times[i - 1][0]) {
-					rolloverDay();
+			for (let i = 0; i < scheduleDays[scheduleDay]!.times.length; i++) {
+				if (i > 0 && scheduleDays[scheduleDay]!.times[i][0] < scheduleDays[scheduleDay]!.times[i - 1][0]) {
+					if (!rolloverDay()) break outer;
 					rolledOverDay = true;
 				}
 
-				date.setHours(scheduleDays[scheduleDay].times[i][0], scheduleDays[scheduleDay].times[i][1], 0, 0);
+				date.setHours(scheduleDays[scheduleDay]!.times[i][0], scheduleDays[scheduleDay]!.times[i][1], 0, 0);
 				this.officialTournaments[room].push({format, time: date.getTime(), official: true});
 			}
 
-			if (!rolledOverDay) rolloverDay();
+			if (!rolledOverDay) {
+				if (!rolloverDay()) break outer;
+			}
 		}
 
 		this.officialTournaments[room].sort((a, b) => a.time - b.time);
@@ -202,8 +219,11 @@ export class Tournaments {
 		if (!(id in database.customFormats)) {
 			const currentGen = Dex.getGen();
 			for (let i = currentGen; i >= 1; i--) {
-				id = 'gen' + i + id;
-				if (id in database.customFormats) break;
+				const genId = 'gen' + i + id;
+				if (genId in database.customFormats) {
+					id = genId;
+					break;
+				}
 			}
 
 			if (!(id in database.customFormats)) return;
@@ -212,7 +232,6 @@ export class Tournaments {
 		format = Dex.getFormat(database.customFormats[id].formatId);
 		if (!format) return;
 
-		format.tournamentName = database.customFormats[id].name;
 		format.customFormatName = database.customFormats[id].name;
 		return format;
 	}
@@ -223,7 +242,7 @@ export class Tournaments {
 		return user.hasRank(room, 'driver');
 	}
 
-	createTournament(room: Room, json: ITournamentCreateJson): Tournament | undefined {
+	onNewTournament(room: Room, json: ITournamentCreateJson): Tournament | undefined {
 		const format = json.teambuilderFormat ? Dex.getFormat(json.teambuilderFormat) : Dex.getFormat(json.format);
 		if (!format || format.effectType !== 'Format') return;
 
@@ -270,8 +289,6 @@ export class Tournaments {
 						updatedDatabase = true;
 					}
 				}
-
-				delete this.createListeners[room.id];
 			}
 
 			room.forcePublicTournament();
@@ -332,6 +349,8 @@ export class Tournaments {
 
 			if (updatedDatabase) Storage.tryExportDatabase(room.id);
 		}
+
+		delete this.createListeners[room.id];
 
 		return tournament;
 	}
@@ -414,6 +433,11 @@ export class Tournaments {
 							format = potentialFormat;
 							if (format.customFormatName) tournamentName = format.customFormatName;
 							break;
+						}
+
+						if (!format) {
+							return "All formats for " + database.eventInformation[id].name + " are either unplayable or on the past " +
+								"tournaments list.";
 						}
 					}
 				}
@@ -500,7 +524,6 @@ export class Tournaments {
 	}
 
 	bracketToStringEliminationNode(clientNode: IClientTournamentNode): EliminationNode<string> {
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 		const eliminationNode = new EliminationNode({user: clientNode.team ? Tools.stripHtmlCharacters(clientNode.team) : ""});
 
 		if (clientNode.children) {
@@ -710,8 +733,12 @@ export class Tournaments {
 	}
 
 	setOfficialTournamentTimer(room: Room): void {
-		this.setTournamentTimer(room, this.nextOfficialTournaments[room.id].time,
-			Dex.getExistingFormat(this.nextOfficialTournaments[room.id].format, true), this.maxPlayerCap, true);
+		if (!(room.id in this.nextOfficialTournaments)) return;
+
+		const format = this.getFormat(this.nextOfficialTournaments[room.id].format, room) ||
+			Dex.getExistingFormat(DEFAULT_OFFICIAL_TOURNAMENT);
+
+		this.setTournamentTimer(room, this.nextOfficialTournaments[room.id].time, format, this.maxPlayerCap, true, format.customFormatName);
 	}
 
 	canSetRandomTournament(room: Room): boolean {
@@ -725,10 +752,11 @@ export class Tournaments {
 	}
 
 	setRandomTournamentTimer(room: Room, minutes: number, quickFormat?: boolean): void {
-		let officialFormat: IFormat | null = null;
+		let officialFormat: IFormat | undefined;
 		if (room.id in this.nextOfficialTournaments) {
-			officialFormat = Dex.getExistingFormat(this.nextOfficialTournaments[room.id].format, true);
+			officialFormat = this.getFormat(this.nextOfficialTournaments[room.id].format, room);
 		}
+
 		const database = Storage.getDatabase(room);
 		const pastTournamentIds: string[] = [];
 		if (database.pastTournaments) {
@@ -738,12 +766,38 @@ export class Tournaments {
 			}
 		}
 
-		const currentGen = Dex.getCurrentGenString();
-		const formats: IFormat[] = [];
-		for (const i of Dex.getData().formatKeys) {
-			const format = Dex.getExistingFormat(i);
-			if (!format.tournamentPlayable || format.unranked || format.mod !== currentGen ||
-				(officialFormat && officialFormat.id === format.id)) continue;
+		const customFormats: string[] = [];
+		if (Config.customFormatRandomTournaments && Config.customFormatRandomTournaments.includes(room.id) && database.customFormats) {
+			for (const i in database.customFormats) {
+				const format = this.getFormat(database.customFormats[i].name, room);
+				if (!format) continue;
+
+				customFormats.push(database.customFormats[i].name);
+			}
+		}
+
+		let allowPastGen = false;
+		let allowUnranked = false;
+		let canAddCustomRules = true;
+		let formatsPool: readonly string[];
+		if (customFormats.length) {
+			allowPastGen = true;
+			canAddCustomRules = false;
+			formatsPool = customFormats;
+		} else if (database.randomTournamentFormats && database.randomTournamentFormats.length) {
+			allowPastGen = true;
+			allowUnranked = true;
+			formatsPool = database.randomTournamentFormats;
+		} else {
+			formatsPool = Dex.getData().formatKeys;
+		}
+
+		const currentGenMod = Dex.getCurrentGenMod();
+		const validFormats: IFormat[] = [];
+		for (const i of formatsPool) {
+			const format = this.getFormat(i, room);
+			if (!format || !format.tournamentPlayable || (officialFormat && officialFormat.id === format.id) ||
+				(format.unranked && !allowUnranked) || (format.mod !== currentGenMod && !allowPastGen)) continue;
 
 			if (quickFormat) {
 				if (!format.quickFormat) continue;
@@ -751,13 +805,13 @@ export class Tournaments {
 				if (format.quickFormat || pastTournamentIds.includes(format.id)) continue;
 			}
 
-			formats.push(format);
+			validFormats.push(format);
 		}
 
-		if (!formats.length) return;
+		if (!validFormats.length) return;
 
-		let format = Tools.sampleOne(formats);
-		if (Config.randomTournamentCustomRules && room.id in Config.randomTournamentCustomRules) {
+		let format = Tools.sampleOne(validFormats);
+		if (canAddCustomRules && Config.randomTournamentCustomRules && room.id in Config.randomTournamentCustomRules) {
 			const rules = Tools.shuffle(Config.randomTournamentCustomRules[room.id]);
 			for (const rule of rules) {
 				const customRuleFormat = this.getFormat(format.id + "@@@" + rule, room);
@@ -768,27 +822,37 @@ export class Tournaments {
 			}
 		}
 
-		let playerCap: number = 0;
-		if (Config.defaultTournamentPlayerCaps && room.id in Config.defaultTournamentPlayerCaps) {
-			playerCap = Config.defaultTournamentPlayerCaps[room.id];
-		}
-
-		this.setTournamentTimer(room, Date.now() + (minutes * 60 * 1000) + this.delayedOfficialTournamentTime, format, playerCap);
+		this.setTournamentTimer(room, Date.now() + (minutes * 60 * 1000) + this.delayedOfficialTournamentTime, format,
+			this.getDefaultPlayerCap(room));
 	}
 
-	setTournamentTimer(room: Room, startTime: number, format: IFormat, cap: number, official?: boolean, tournamentName?: string): void {
+	setTournamentTimer(room: Room, startTime: number, format: IFormat, cap: number, official?: boolean, name?: string): void {
 		if (room.id in this.tournamentTimers) clearTimeout(this.tournamentTimers[room.id]);
 
 		let timer = startTime - Date.now();
 		if (timer <= 0) timer = this.delayedOfficialTournamentTime;
 
-		this.tournamentTimerData[room.id] = {cap, formatid: format.inputTarget, startTime, official: official, tournamentName};
+		this.tournamentTimerData[room.id] = {cap, formatid: format.inputTarget, startTime, official: official, name};
 		this.tournamentTimers[room.id] = setTimeout(() => {
-			if (room.tournament) return;
-			this.createListeners[room.id] = {format, official: official || false};
-			room.createTournament(format, 'elimination', cap, tournamentName);
-			delete this.tournamentTimers[room.id];
+			this.createTournament(room, {format, cap, official, name});
 		}, timer);
+	}
+
+	createTournament(room: Room, options: ICreateTournamentOptions): void {
+		if (room.tournament) return;
+
+		// may be set by a scripted game
+		if (!(room.id in this.createListeners)) {
+			this.createListeners[room.id] = {format: options.format, official: options.official};
+		}
+
+		room.createTournament(options.format, options.type || 'elimination', options.cap, options.name);
+
+		if (room.id in this.tournamentTimers) {
+			clearTimeout(this.tournamentTimers[room.id]);
+			delete this.tournamentTimers[room.id];
+			delete this.tournamentTimerData[room.id];
+		}
 	}
 
 	onTournamentEnd(room: Room, now: number): void {
@@ -843,6 +907,7 @@ export class Tournaments {
 		const schedule = database.officialTournamentSchedule.years[year].months[month];
 		const daysOfTheWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 		const date = new Date();
+		date.setFullYear(year);
 		date.setMonth(parseInt(month) - 1, 1);
 		date.setDate(1);
 		const firstDay = date.getDay();
@@ -857,9 +922,15 @@ export class Tournaments {
 			html += "<td>&nbsp;</td>";
 		}
 		for (let i = 1; i < lastDay; i++) {
-			html += "<td style='padding: 4px'><b>" + i + "</b> - " +
-				Dex.getCustomFormatName(this.getFormat(schedule.days[i].format, room) || Dex.getExistingFormat(DEFAULT_OFFICIAL_TOURNAMENT),
-					websiteHtml) + "</td>";
+			let name = "";
+			if (schedule.days[i]) {
+				const format = this.getFormat(schedule.days[i]!.format, room);
+				if (format) name = Dex.getCustomFormatName(format, websiteHtml);
+			}
+
+			if (!name) name = Dex.getCustomFormatName(Dex.getExistingFormat(DEFAULT_OFFICIAL_TOURNAMENT), websiteHtml);
+
+			html += "<td style='padding: 4px'><b>" + i + "</b> - " + name + "</td>";
 			currentDay++;
 			if (currentDay === 7) {
 				html += "</tr><tr>";
@@ -997,10 +1068,16 @@ export class Tournaments {
 		return "";
 	}
 
-	getRibbonHtml(id: string): string {
+	getRibbonHtml(room: Room, id: string): string {
 		if (Config.tournamentTrainerCardRibbons && id in Config.tournamentTrainerCardRibbons) {
 			return '<img src="' + Config.tournamentTrainerCardRibbons[id].source + '" width=' + TRAINER_BADGE_DIMENSIONS + 'px ' +
 				'height=' + TRAINER_BADGE_DIMENSIONS + 'px title="' + Config.tournamentTrainerCardRibbons[id].name + '" />';
+		}
+
+		if (Config.tournamentPointsShopRibbons && room.id in Config.tournamentPointsShopRibbons &&
+			id in Config.tournamentPointsShopRibbons[room.id]) {
+			return '<img src="' + Config.tournamentPointsShopRibbons[room.id][id].source + '" width=' + TRAINER_BADGE_DIMENSIONS + 'px ' +
+				'height=' + TRAINER_BADGE_DIMENSIONS + 'px title="' + Config.tournamentPointsShopRibbons[room.id][id].name + '" />';
 		}
 
 		return "";
@@ -1117,7 +1194,7 @@ export class Tournaments {
 			const ribbonsPerLine = 15;
 			const ribbonsHtml: string[] = [];
 			for (const ribbon of trainerCard.ribbons) {
-				let ribbonHtml = this.getRibbonHtml(ribbon);
+				let ribbonHtml = this.getRibbonHtml(trainerCardRoom, ribbon);
 				if (ribbonHtml) {
 					if (ribbonsHtml.length && ribbonsHtml.length % ribbonsPerLine === 0) ribbonHtml = "<br />" + ribbonHtml;
 					ribbonsHtml.push(ribbonHtml);
@@ -1139,10 +1216,19 @@ export class Tournaments {
 		return html;
 	}
 
-	displayTrainerCard(room: Room, name: string): void {
+	displayTrainerCard(room: Room, name: string, htmlBefore?: string, htmlAfter?: string): void {
 		const id = Tools.toId(name);
 		const trainerCardRoom = this.getTrainerCardRoom(room);
 		if (trainerCardRoom) {
+			const sendTrainerCard = (username: string) => {
+				const trainerCard = this.getTrainerCardHtml(room, username);
+				if (trainerCard) {
+					room.sayHtml((htmlBefore || "") + trainerCard + (htmlAfter || ""));
+				} else if (htmlBefore || htmlAfter) {
+					room.sayHtml((htmlBefore || "") + (htmlAfter || ""));
+				}
+			};
+
 			const database = Storage.getDatabase(trainerCardRoom);
 			const user = Users.get(name);
 			if (user && (!user.globalRank || !database.tournamentTrainerCards || !(id in database.tournamentTrainerCards))) {
@@ -1152,8 +1238,7 @@ export class Tournaments {
 						database.tournamentTrainerCards![id].avatar = avatar as TrainerSpriteId;
 					}
 
-					const trainerCard = this.getTrainerCardHtml(room, user.name);
-					if (trainerCard) room.sayHtml(trainerCard);
+					sendTrainerCard(user.name);
 				};
 
 				if (user.avatar && user.globalRank) {
@@ -1164,10 +1249,20 @@ export class Tournaments {
 					});
 				}
 			} else {
-				const trainerCard = this.getTrainerCardHtml(room, name);
-				if (trainerCard) room.sayHtml(trainerCard);
+				sendTrainerCard(name);
 			}
 		}
+	}
+
+	hasTournamentPointsShopItems(room: Room): boolean {
+		if (!Config.tournamentPointsShop || !Config.tournamentPointsShop.includes(room.id)) return false;
+
+		const trainerCardRoom = this.getTrainerCardRoom(room);
+		if (!trainerCardRoom) return false;
+
+		if (Config.tournamentPointsShopRibbons && trainerCardRoom.id in Config.tournamentPointsShopRibbons) return true;
+
+		return false;
 	}
 
 	/* eslint-disable @typescript-eslint/no-unnecessary-condition */
@@ -1211,7 +1306,7 @@ export class Tournaments {
 					const data = previous.tournamentTimerData[i];
 					const format = this.getFormat(data.formatid, room);
 					if (format && format.effectType === 'Format') {
-						this.setTournamentTimer(room, data.startTime, format, data.cap, data.official, data.tournamentName);
+						this.setTournamentTimer(room, data.startTime, format, data.cap, data.official, data.name);
 					}
 				}
 			}

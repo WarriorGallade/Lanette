@@ -8,7 +8,6 @@ const REMOVE_COMMAND = "remove";
 
 class CrustlesCrumblingBlocks extends ScriptedGame {
 	blocks: number = 0;
-	currentPlayer: Player | null = null;
 	hasAssistActions: boolean = true;
 	minPlayers: number = 4;
 	order: Player[] = [];
@@ -35,7 +34,7 @@ class CrustlesCrumblingBlocks extends ScriptedGame {
 		const remainingPlayerCount = this.getRemainingPlayerCount();
 		if (remainingPlayerCount === 2) {
 			this.say("There are no blocks remaining!");
-			this.timeout = setTimeout(() => this.end(), 5 * 1000);
+			this.setTimeout(() => this.end(), 5 * 1000);
 			return;
 		} else if (remainingPlayerCount <= 1) {
 			this.say("The game has ended due to a lack of players.");
@@ -51,7 +50,7 @@ class CrustlesCrumblingBlocks extends ScriptedGame {
 		const html = this.getRoundHtml(players => this.getPlayerNames(players));
 		const uhtmlName = this.uhtmlBaseName + '-round-html';
 		this.onUhtml(uhtmlName, html, () => {
-			this.timeout = setTimeout(() => {
+			this.setTimeout(() => {
 				let blocks = remainingPlayerCount * 3;
 				if (blocks > 25) {
 					blocks = 25;
@@ -91,7 +90,7 @@ class CrustlesCrumblingBlocks extends ScriptedGame {
 			this.blocks + "** block" + (this.blocks > 1 ? "s" : "") + " remaining.";
 		this.on(text, () => {
 			this.currentPlayer = currentPlayer;
-			this.timeout = setTimeout(() => this.nextRound(), 30 * 1000);
+			this.setTimeout(() => this.nextRound(), 30 * 1000);
 		});
 		this.say(text);
 
@@ -109,7 +108,7 @@ class CrustlesCrumblingBlocks extends ScriptedGame {
 		this.say("**" + player.name + "** was forced to remove the last block from the pyramid and has been eliminated from the game!");
 		this.eliminatePlayer(player);
 		this.currentPlayer = null;
-		this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+		this.setTimeout(() => this.nextRound(), 5 * 1000);
 	}
 
 	onEnd(): void {

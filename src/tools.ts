@@ -7,8 +7,9 @@ import type { IColorPick } from './html-pages/components/color-picker';
 import type { PRNG } from './lib/prng';
 import type { Room } from './rooms';
 import { eggGroupHexCodes, hexCodes, namedHexCodes, pokemonColorHexCodes, moveCategoryHexCodes, typeHexCodes } from './tools-hex-codes';
+import type { IClientMessageTypes, IParsedIncomingMessage } from './types/client';
 import type {
-	BorderType, HexCode, IExtractedBattleId, IHexCodeData, IParsedSmogonLink, IWriteQueueItem, NamedHexCode, TimeZone
+	BorderType, HexCode, IExtractedBattleId, IHexCodeData, IParsedSmogonLink, IWriteQueueItem, NamedHexCode, TextColorHex, TimeZone
 } from './types/tools';
 import type { IParam, IParametersGenData, ParametersSearchType } from './workers/parameters';
 
@@ -68,6 +69,8 @@ const BUTTON_VALUE_REGEX = / value ?= ?"([^"]*)"/i;
 const MSG_COMMAND_REGEX = /^\/(?:msg|pm|w|whisper|botmsg) /;
 const BOT_MSG_COMMAND_REGEX = /^\/msgroom (?:[a-z0-9-]+), ?\/botmsg /;
 
+const MAIN_SERVER = 'play.pokemonshowdown.com';
+const MAIN_REPLAY_SERVER = 'replay.pokemonshowdown.com';
 const BATTLE_ROOM_PREFIX = 'battle-';
 const GROUPCHAT_PREFIX = 'groupchat-';
 const GUEST_USER_PREFIX = 'Guest ';
@@ -76,10 +79,12 @@ const SMOGON_THREADS_PREFIX = 'https://www.smogon.com/forums/threads/';
 const SMOGON_POSTS_PREFIX = 'https://www.smogon.com/forums/posts/';
 const SMOGON_PERMALINK_PAGE_PREFIX = "page-";
 const SMOGON_PERMALINK_POST_PREFIX = "post-";
-const maxMessageLength = 300;
+const maxMessageLength = 1000;
 const maxUsernameLength = 18;
 const githubApiThrottle = 2 * 1000;
-const rootFolder = path.resolve(__dirname, '..');
+
+// __dirname will be [..]/build/src
+const rootFolder = path.resolve(__dirname, '..', '..');
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 let timeout = setTimeout(() => {}, 1000);
@@ -92,13 +97,15 @@ timeout = undefined;
 export class Tools {
 	// exported constants
 	readonly battleRoomPrefix: string = BATTLE_ROOM_PREFIX;
-	readonly buildFolder: string = path.join(rootFolder, 'build');
+	readonly rootBuildFolder: string = path.join(rootFolder, 'build');
+	readonly srcBuildFolder: string = path.join(rootFolder, 'build', 'src');
 	readonly eggGroupHexCodes: typeof eggGroupHexCodes = eggGroupHexCodes;
 	readonly groupchatPrefix: string = GROUPCHAT_PREFIX;
 	readonly guestUserPrefix: string = GUEST_USER_PREFIX;
 	readonly hexCodes: typeof hexCodes = hexCodes;
 	readonly letters: string = "abcdefghijklmnopqrstuvwxyz";
-	readonly mainServer: string = 'play.pokemonshowdown.com';
+	readonly mainServer: string = MAIN_SERVER;
+	readonly mainReplayServer: string = MAIN_REPLAY_SERVER;
 	readonly maxMessageLength: typeof maxMessageLength = maxMessageLength;
 	readonly maxUsernameLength: typeof maxUsernameLength = maxUsernameLength;
 	readonly minRoomHeight: number = 500;
@@ -113,6 +120,7 @@ export class Tools {
 	readonly smogonPermalinkPostPrefix: string = SMOGON_PERMALINK_POST_PREFIX;
 	readonly smogonPostsPrefix: string = SMOGON_POSTS_PREFIX;
 	readonly smogonThreadsPrefix: string = SMOGON_THREADS_PREFIX;
+	readonly spritePrefix: string = '//' + MAIN_SERVER + '/sprites';
 	readonly timezones: TimeZone[] = ['GMT-12:00', 'GMT-11:00', 'GMT-10:00', 'GMT-09:30', 'GMT-09:00', 'GMT-08:00', 'GMT-07:00',
 		'GMT-06:00', 'GMT-05:00', 'GMT-04:00', 'GMT-03:30', 'GMT-03:00', 'GMT-02:00', 'GMT-01:00', 'GMT+00:00', 'GMT+01:00', 'GMT+02:00',
 		'GMT+03:00', 'GMT+03:30', 'GMT+04:00', 'GMT+04:30', 'GMT+05:00', 'GMT+05:30', 'GMT+05:45', 'GMT+06:00', 'GMT+06:30', 'GMT+07:00',
@@ -143,6 +151,36 @@ export class Tools {
 		this.unrefProperties(previous.moveCategoryHexCodes);
 		this.unrefProperties(previous.typeHexCodes);
 		this.unrefProperties(previous);
+	}
+
+	parseIncomingMessage<T = IClientMessageTypes>(incomingMessage: string): IParsedIncomingMessage<T> {
+		let message: string;
+		let messageType: keyof T;
+		if (incomingMessage.charAt(0) !== "|") {
+			message = incomingMessage;
+			messageType = '' as keyof T;
+		} else {
+			message = incomingMessage.substr(1);
+			const pipeIndex = message.indexOf("|");
+			if (pipeIndex !== -1) {
+				messageType = message.substr(0, pipeIndex) as keyof T;
+				message = message.substr(pipeIndex + 1);
+			} else {
+				messageType = message as keyof T;
+				message = '';
+			}
+		}
+
+		return {
+			incomingMessage,
+			type: messageType,
+			whole: message,
+			parts: message.split("|"),
+		};
+	}
+
+	getSubIncomingMessage<T>(parsedIncomingMessage: IParsedIncomingMessage): IParsedIncomingMessage<T> {
+		return this.parseIncomingMessage<T>((parsedIncomingMessage.whole.charAt(0) === "|" ? "" : "|") + parsedIncomingMessage.whole);
 	}
 
 	checkHtml(room: Room, htmlContent: string): boolean {
@@ -310,7 +348,21 @@ export class Tools {
 			color: colorPick.hexCode,
 			gradient: colorPick.gradient,
 			secondaryColor: colorPick.secondaryHexCode,
+			textColor: colorPick.textColor,
 		} : colorPick.hexCode;
+	}
+
+	getBlackTextCode(): TextColorHex {
+		return '#000000';
+	}
+
+	getWhiteTextCode(): TextColorHex {
+		return '#ffffff';
+	}
+
+	getDynamicTextHexCode(color: TextColorHex, background?: HexCode): TextColorHex {
+		if (Config.getDynamicTextHexCode) return Config.getDynamicTextHexCode(color, background);
+		return color;
 	}
 
 	getHexCodeGradient(topHex: HexCode, bottomHex?: HexCode): string {
@@ -321,7 +373,7 @@ export class Tools {
 		return ['solid', 'dotted', 'dashed', 'double', 'inset', 'outset'];
 	}
 
-	getHexLabel(color: IHexCodeData, label: string, width?: 'auto' | number): string {
+	getTypeOrColorLabel(color: IHexCodeData, label: string, width?: 'auto' | number): string {
 		return '<div style="display: inline-block;background: ' + color.gradient + ';border: 1px solid #68a;border-radius: 5px;' +
 			'width: ' + (width || 75) + 'px;padding: 1px;color: #ffffff;text-shadow: 1px 1px 1px #333;' +
 			'text-align: center"><b>' + label + '</b></div>';
@@ -381,15 +433,12 @@ export class Tools {
 		if (backgroundColor) {
 			if (typeof backgroundColor === 'string') {
 				if (backgroundColor in this.hexCodes) {
-					if (this.hexCodes[backgroundColor]!.textColor) {
-						textColor = 'color: ' + this.hexCodes[backgroundColor]!.textColor + ';';
-					} else {
-						textColor = 'color: #000000;';
-					}
+					textColor = 'color: ' + this.getDynamicTextHexCode(this.hexCodes[backgroundColor]!.textColor || '#000000',
+						this.hexCodes[backgroundColor]!.color) + ';';
 					background = "background: " + this.hexCodes[backgroundColor]!.gradient + ";";
 				}
 			} else {
-				textColor = 'color: #000000;';
+				textColor = 'color: ' + this.getDynamicTextHexCode(backgroundColor.textColor || '#000000', backgroundColor.color) + ';';
 				background = "background: " + backgroundColor.gradient + ";";
 			}
 		}
@@ -404,7 +453,8 @@ export class Tools {
 			if (typeof backgroundColor === 'string') {
 				if (backgroundColor in this.hexCodes) {
 					if (this.hexCodes[backgroundColor]!.textColor) {
-						buttonStyle += "color: " + this.hexCodes[backgroundColor]!.textColor + ";";
+						buttonStyle += "color: " + this.getDynamicTextHexCode(this.hexCodes[backgroundColor]!.textColor!,
+							this.hexCodes[backgroundColor]!.color) + ";";
 					} else {
 						buttonStyle += "color: #000000;";
 					}
@@ -412,7 +462,8 @@ export class Tools {
 					buttonStyle += "text-shadow: none;";
 				}
 			} else {
-				buttonStyle += "color: #000000;";
+				buttonStyle += "color: " + this.getDynamicTextHexCode(backgroundColor.textColor || "#000000",
+					backgroundColor.color) + ";";
 				buttonStyle += "background: " + backgroundColor.gradient + ";";
 				buttonStyle += "text-shadow: none;";
 			}
@@ -625,8 +676,8 @@ export class Tools {
 			const filtered: string[] = [];
 			for (const slice of intersection) {
 				const id = this.toId(slice);
-				const isRegionalForm = (parametersData.formes[id] === 'Galar' || parametersData.formes[id] === 'Alola') &&
-					slice !== "Pikachu-Alola";
+				const isRegionalForm = (parametersData.formes[id] === 'Galar' || parametersData.formes[id] === 'Alola' ||
+					parametersData.formes[id] === 'Paldea') && slice !== "Pikachu-Alola";
 				if (!isRegionalForm && id in parametersData.otherFormes &&
 					intersection.includes(parametersData.otherFormes[id])) continue;
 				if (parametersData.gigantamax.includes(slice) && !tierSearch) continue;

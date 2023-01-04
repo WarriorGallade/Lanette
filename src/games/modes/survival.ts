@@ -14,7 +14,6 @@ const removedOptions: string[] = ['points', 'freejoin'];
 type SurvivalThis = QuestionAndAnswer & Survival;
 
 class Survival {
-	currentPlayer: Player | null = null;
 	readonly maxPlayers: number = 20;
 	maxSurvivalRound: number = 10;
 	playerList: Player[] = [];
@@ -49,7 +48,7 @@ class Survival {
 	}
 
 	onStart(this: SurvivalThis): void {
-		this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+		this.setTimeout(() => this.nextRound(), 5 * 1000);
 	}
 
 	getDisplayedRoundNumber(this: SurvivalThis): number {
@@ -136,7 +135,7 @@ const commandDefinitions: GameCommandDefinitions<SurvivalThis> = {
 			this.say("**" + player.name + "** advances to the next round!");
 			this.displayAnswers(answer);
 			this.answers = [];
-			this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+			this.setTimeout(() => this.nextRound(), 5 * 1000);
 			return true;
 		},
 		aliases: ['g'],

@@ -3,29 +3,49 @@ import { ScriptedGame } from "../room-game-scripted";
 import type { GameCommandDefinitions, IGameFile } from "../types/games";
 import type { IPokemon, ITypeData } from "../types/pokemon-showdown";
 
+interface IPreviousGuess {
+	parameters: string;
+	correct: boolean;
+}
+
 const MAX_ROUND_PARAMETERS = 5;
 
-const allStats = ["hp", "hitpoints", "atk", "attack", "def", "defense", "spa", "spatk", "specialattack", "spc", "special", "spd",
-	"spdef", "specialdefense", "spe", "speed", "bst", "basestattotal", "ht", "height", "weight", "wt"];
+const USABLE_STATS	 = ["hp", "hitpoints", "atk", "attack", "def", "defense", "spa", "spatk", "specialattack", "spc", "special", "spd",
+	"spdef", "specialdefense", "spe", "speed", "bst", "basestattotal", "ht", "height", "weight", "wt", "gen", "g"];
 
 class DittosWhoAmI extends ScriptedGame {
+	canLateJoin: boolean = true;
 	tiers: string[] = [];
 	colors: string[] = [];
 	eggGroups: string[] = [];
-	currentPlayer: Player | null = null;
 	dittoRound: number = 0;
+	includedPokemon: string[] = [];
 	playerInactiveRoundLimit = 2;
 	playerOrder: Player[] = [];
 	points = new Map<Player, number>();
+	pokemonList: IPokemon[] = [];
+	playerGuesses = new Map<Player, IPreviousGuess[]>();
 	playerPokemon = new Map<Player, IPokemon>();
 	playerWeaknesses = new Map<Player, string[]>();
 	playerResistances = new Map<Player, string[]>();
 	maxDittoRounds: number = 20;
 	roundTime: number = 30 * 1000;
-	winWarning: boolean = false;
+	finalRound: boolean = false;
+
+	onAddPlayer(player: Player, lateJoin?: boolean): boolean {
+		if (lateJoin) {
+			if (!this.pokemonList.length) return false;
+
+			if (this.playerOrder.length) this.playerOrder.push(player);
+			this.givePokemon(player, this.pokemonList[0]);
+			this.pokemonList.shift();
+		}
+
+		return true;
+	}
 
 	onStart(): void {
-		const pokemonList = this.shuffle(Games.getPokemonList(x => {
+		this.pokemonList = this.shuffle(Games.getPokemonList({filter: x => {
 			const color = Tools.toId(x.color);
 			if (!this.colors.includes(color)) this.colors.push(color);
 
@@ -38,45 +58,47 @@ class DittosWhoAmI extends ScriptedGame {
 			}
 
 			if (x.forme && !(x.forme === 'Mega' || x.forme === 'Totem' || x.forme === 'Gmax' || x.forme === 'Alola' ||
-				x.forme === 'Galar' || x.forme === 'Hisui')) return false;
+				x.forme === 'Galar' || x.forme === 'Hisui' || x.forme === 'Paldea')) return false;
 			return true;
-		}));
+		}}));
 
-		const typeKeys = Dex.getData().typeKeys;
+		this.includedPokemon = this.pokemonList.map(x => x.name);
 
 		for (const id in this.players) {
-			const player = this.players[id];
-			const pokemon = pokemonList[0];
-			pokemonList.shift();
-
-			this.playerPokemon.set(player, pokemon);
-
-			const resistances: string[] = [];
-			const weaknesses: string[] = [];
-			for (const key of typeKeys) {
-				const type = Dex.getExistingType(key);
-				if (Dex.isImmune(type.name, pokemon.types)) {
-					resistances.push(type.name);
-				} else {
-					const effectiveness = Dex.getEffectiveness(type.name, pokemon.types);
-					if (effectiveness <= -1) {
-						resistances.push(type.name);
-					} else if (effectiveness >= 1) {
-						weaknesses.push(type.name);
-					}
-				}
-			}
-
-			this.playerResistances.set(player, resistances);
-			this.playerWeaknesses.set(player, weaknesses);
+			this.givePokemon(this.players[id], this.pokemonList[0]);
+			this.pokemonList.shift();
 		}
 
 		const text = "Each round, you must guess a parameter with ``" + Config.commandCharacter + "g [parameter]``. If you believe you " +
 			"know what Pokemon you are, you may guess that instead with ``" + Config.commandCharacter + "g [Pokemon]``!";
 		this.on(text, () => {
-			this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+			this.setTimeout(() => this.nextRound(), 5 * 1000);
 		});
 		this.say(text);
+	}
+
+	givePokemon(player: Player, pokemon: IPokemon): void {
+		this.playerPokemon.set(player, pokemon);
+		this.playerGuesses.set(player, []);
+
+		const resistances: string[] = [];
+		const weaknesses: string[] = [];
+		for (const key of Dex.getData().typeKeys) {
+			const type = Dex.getExistingType(key);
+			if (Dex.isImmune(type.name, pokemon.types)) {
+				resistances.push(type.name);
+			} else {
+				const effectiveness = Dex.getEffectiveness(type.name, pokemon.types);
+				if (effectiveness <= -1) {
+					resistances.push(type.name);
+				} else if (effectiveness >= 1) {
+					weaknesses.push(type.name);
+				}
+			}
+		}
+
+		this.playerResistances.set(player, resistances);
+		this.playerWeaknesses.set(player, weaknesses);
 	}
 
 	checkTierAlias(input: string): string{
@@ -109,12 +131,15 @@ class DittosWhoAmI extends ScriptedGame {
 			guess = guess.slice(1);
 		}
 
-		let correctGuess: boolean | undefined;
 		const pokemon = Dex.getPokemon(guess);
 		if (pokemon) {
+			if (!this.includedPokemon.includes(pokemon.name)) {
+				return pokemon.name + " cannot be assigned in this game.";
+			}
+
 			if (pokemon.name === playerPokemon.name) {
-				this.say("**Correct!**" + (this.playerOrder.length && !this.winWarning ? " This is now the final round of the game." : ""));
-				this.winWarning = true;
+				this.say("**Correct!**" + (this.playerOrder.length && !this.finalRound ? " This is now the final round of the game." : ""));
+				this.finalRound = true;
 				this.points.set(this.currentPlayer!, 1);
 			} else {
 				this.say("**Incorrect!** You were " + playerPokemon.name + ". " + this.currentPlayer!.name + " has been " +
@@ -123,8 +148,11 @@ class DittosWhoAmI extends ScriptedGame {
 			}
 
 			return true;
+		} else if (this.finalRound) {
+			return "This is the final round so you must guess your Pokemon.";
 		}
 
+		let correctGuess: boolean | undefined;
 		const move = Dex.getMove(guess);
 		if (move) {
 			correctGuess = false;
@@ -133,6 +161,8 @@ class DittosWhoAmI extends ScriptedGame {
 					correctGuess = true;
 				}
 			}
+
+			return this.checkAnswerNegation(correctGuess, negation);
 		}
 
 		const ability = Dex.getAbility(guess);
@@ -144,6 +174,8 @@ class DittosWhoAmI extends ScriptedGame {
 					correctGuess = true;
 				}
 			}
+
+			return this.checkAnswerNegation(correctGuess, negation);
 		}
 
 		const id = Tools.toId(guess);
@@ -156,9 +188,7 @@ class DittosWhoAmI extends ScriptedGame {
 					correctGuess = true;
 				}
 			}
-		}
 
-		if (correctGuess !== undefined) {
 			return this.checkAnswerNegation(correctGuess, negation);
 		}
 
@@ -192,12 +222,15 @@ class DittosWhoAmI extends ScriptedGame {
 			correctGuess = playerPokemon.forme.startsWith("Galar");
 		} else if (id === "hisui" || id === "hisuian") {
 			correctGuess = playerPokemon.forme.startsWith("Hisui");
+		} else if (id === "paldea" || id === "paldean") {
+			correctGuess = playerPokemon.forme.startsWith("Paldea");
 		} else if (id === "totem") {
 			correctGuess = playerPokemon.forme.includes("Totem");
 		} else if (id === "gmax" || id === "gigantamax") {
 			correctGuess = playerPokemon.forme.includes("Gmax");
-		} else if (id.startsWith('gen') && id.length <= 5) {
-			const gen = parseInt(id.slice(3));
+		} else if (((id.startsWith('gen') && id.length <= 5) || (id.startsWith('g') && id.length <= 3)) && !guess.includes('>') &&
+			!guess.includes('<')) {
+			const gen = id.startsWith('gen') ? parseInt(id.slice(3)) : parseInt(id.slice(1));
 			if (isNaN(gen) || gen < 1 || gen > Dex.getGen()) {
 				return "You must specify a valid gen.";
 			}
@@ -248,7 +281,7 @@ class DittosWhoAmI extends ScriptedGame {
 		}
 
 		let statName = "";
-		let statValue = 0;
+		let statValue = -1;
 		let lessThanIndex: number | undefined;
 		let greaterThanIndex: number | undefined;
 		let equalIndex: number | undefined;
@@ -295,11 +328,11 @@ class DittosWhoAmI extends ScriptedGame {
 		}
 
 		if (statName) {
-			if (!allStats.includes(statName)) {
+			if (!USABLE_STATS.includes(statName)) {
 				return "You must specify a valid stat name.";
 			}
 
-			if (isNaN(statValue) || statValue < 1) {
+			if (isNaN(statValue) || statValue < 0) {
 				return "You must specify a valid stat value.";
 			}
 
@@ -322,6 +355,8 @@ class DittosWhoAmI extends ScriptedGame {
 				pokemonStat = playerPokemon.heightm;
 			} else if (statName === "wt" || statName === "weight") {
 				pokemonStat = playerPokemon.weightkg;
+			} else if (statName === "gen" || statName === "g") {
+				pokemonStat = playerPokemon.gen;
 			}
 
 			let correctStat = false;
@@ -333,7 +368,7 @@ class DittosWhoAmI extends ScriptedGame {
 		}
 
 		return "You must ask a question about moves, abilities, types, egg groups, color, formes, evolution stage, gen, " +
-			"weaknesses, resistances, or stats";
+			"weaknesses, resistances, or stats.";
 	}
 
 	onNextRound(): void {
@@ -374,7 +409,7 @@ class DittosWhoAmI extends ScriptedGame {
 			const html = this.getRoundHtml(players => this.getPlayerNames(players), this.getRemainingPlayers(this.playerOrder),
 				"Round " + this.dittoRound);
 			this.onUhtml(uhtmlName, html, () => {
-				this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
+				this.setTimeout(() => this.nextRound(), 5 * 1000);
 			});
 			this.sayUhtml(uhtmlName, html);
 
@@ -401,7 +436,21 @@ class DittosWhoAmI extends ScriptedGame {
 		const text = "**" + currentPlayer.name + "** you are up!";
 		this.on(text, () => {
 			this.currentPlayer = currentPlayer;
-			this.timeout = setTimeout(() => this.nextRound(), this.roundTime);
+
+			const previousGuesses = this.playerGuesses.get(currentPlayer)!;
+			if (previousGuesses.length) {
+				let html = "<b>Your previous guesses</b>:<br /><br />";
+				const guessesHtml: string[] = [];
+				for (const previousGuess of previousGuesses) {
+					guessesHtml.push("<code>" + Tools.escapeHTML(previousGuess.parameters) + "</code> -> <b>" +
+						(previousGuess.correct ? "Yes" : "No") + "</b>");
+				}
+				html += guessesHtml.join(", ");
+
+				currentPlayer.sayPrivateUhtml(html, this.actionsUhtmlName);
+			}
+
+			this.setTimeout(() => this.nextRound(), this.roundTime);
 		});
 		this.say(text);
 	}
@@ -426,6 +475,11 @@ const commands: GameCommandDefinitions<DittosWhoAmI> = {
 		command(target, room, user) {
 			if (this.players[user.id] !== this.currentPlayer) return false;
 
+			if (!Tools.toId(target)) {
+				this.say("You must include a parameter or Pokemon.");
+				return false;
+			}
+
 			const player = this.players[user.id];
 			const questions = target.split("|");
 			if (questions.length > MAX_ROUND_PARAMETERS) {
@@ -433,10 +487,18 @@ const commands: GameCommandDefinitions<DittosWhoAmI> = {
 				return false;
 			}
 
+			if (Dex.getPokemon(questions[0]) && questions.length > 1) {
+				this.say("You can only guess 1 Pokemon.");
+				return false;
+			}
+
 			let atLeastOneCorrect = false;
+			const formattedQuestions: string[] = [];
 			for (const question of questions) {
 				const trimmed = question.trim();
 				if (!trimmed) continue;
+
+				formattedQuestions.push(trimmed.toLowerCase());
 
 				const result = this.checkGuess(trimmed, player);
 				if (typeof result === 'string') {
@@ -447,8 +509,18 @@ const commands: GameCommandDefinitions<DittosWhoAmI> = {
 				if (result) atLeastOneCorrect = true;
 			}
 
-			this.currentPlayer = null;
+			const formattedGuess = formattedQuestions.slice().sort().join("|");
+			const previousGuesses = this.playerGuesses.get(player)!;
+			for (const previousGuess of previousGuesses) {
+				if (previousGuess.parameters === formattedGuess) {
+					this.say("You have already guessed " + (formattedQuestions.length > 1 ? "those parameters" : "that parameter") + "!");
+					return false;
+				}
+			}
 
+			previousGuesses.push({parameters: formattedGuess, correct: atLeastOneCorrect});
+
+			this.currentPlayer = null;
 			if (!player.eliminated && !this.points.get(player)) {
 				if (atLeastOneCorrect) {
 					this.say("**Yes!**");
@@ -457,8 +529,7 @@ const commands: GameCommandDefinitions<DittosWhoAmI> = {
 				}
 			}
 
-			if (this.timeout) clearTimeout(this.timeout);
-			this.timeout = setTimeout(() => this.nextRound(), 3 * 1000);
+			this.setTimeout(() => this.nextRound(), 3 * 1000);
 
 			return true;
 		},
@@ -469,6 +540,11 @@ const commands: GameCommandDefinitions<DittosWhoAmI> = {
 export const game: IGameFile<DittosWhoAmI> = {
 	aliases: ["dittos", "who am i"],
 	category: 'puzzle',
+	challengeSettings: {
+		onevsone: {
+			enabled: true,
+		},
+	},
 	class: DittosWhoAmI,
 	commands,
 	commandDescriptions: [Config.commandCharacter + 'g [parameter]', Config.commandCharacter + 'g [Pokemon]'],

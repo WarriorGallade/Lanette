@@ -19,8 +19,8 @@ import type { IParsedSmogonLink } from './types/tools';
 
 const MAX_CUSTOM_NAME_LENGTH = 100;
 const DEFAULT_CUSTOM_RULES_NAME = " (with custom rules)";
-const CURRENT_GEN = 8;
-const CURRENT_GEN_STRING = 'gen' + CURRENT_GEN;
+const CURRENT_GEN = 9;
+const CURRENT_GEN_MOD = 'gen' + CURRENT_GEN;
 const POKEMON_ICON_HEIGHT = 30;
 const POKEMON_ICON_WIDTH = 40;
 const TRAINER_SPRITE_DIMENSIONS = 80;
@@ -30,6 +30,18 @@ const OM_OF_THE_MONTH = 'OM of the Month';
 const ROA_SPOTLIGHT = 'RoA Spotlight';
 const OM_OF_THE_MONTH_PREFIX = 'omotm';
 const ROA_SPOTLIGHT_PREFIX = 'roas';
+
+const smogonDexGenPaths: Dict<string> = {
+	1: 'rb',
+	2: 'gs',
+	3: 'rs',
+	4: 'dp',
+	5: 'bw',
+	6: 'xy',
+	7: 'sm',
+	8: 'ss',
+	9: 'sv',
+};
 
 const mechanicsDifferences: Dict<string> = {
 	'gen1': '3668073/post-8553244',
@@ -61,7 +73,12 @@ const tagNames: Dict<string> = {
 	'dbl': 'DBL',
 	'duu': 'DUU',
 	'dnu': 'DNU',
+	'nduber': 'ND Uber',
+	'ndou': 'ND OU',
 	'nduubl': 'ND UUBL',
+	'nduu': 'ND UU',
+	'ndrubl': 'ND RUBL',
+	'ndru': 'ND RU',
 	'mega': 'Mega',
 	'glitch': 'Glitch',
 	'past': 'Past',
@@ -120,7 +137,7 @@ const gen2Items: string[] = ['berserkgene', 'berry', 'bitterberry', 'burntberry'
 	'mysteryberry', 'pinkbow', 'polkadotbow', 'przcureberry', 'psncureberry'];
 
 type CustomRuleFormats = Dict<{banlist: string, format: string}>;
-const customRuleFormats: CustomRuleFormats = {
+const baseCustomRuleFormats: CustomRuleFormats = {
 	oubl: {banlist: '+Uber', format: 'OU'},
 	uubl: {banlist: '+UUBL', format: 'UU'},
 	rubl: {banlist: '+RUBL', format: 'RU'},
@@ -129,6 +146,7 @@ const customRuleFormats: CustomRuleFormats = {
 	doubl: {banlist: '+DUber', format: 'Doubles OU'},
 	duubl: {banlist: '+DBL', format: 'Doubles UU'},
 };
+const customRuleFormats: CustomRuleFormats = {};
 
 const nonClauseCustomRuleAliases: Dict<string> = {
 	uber: "Uber",
@@ -171,7 +189,7 @@ const customRuleAliases: Dict<string[]> = {
 	duubl: ['+DBL'],
 	monotype: ['Same Type Clause'],
 	stabmons: ['STABmons Move Legality'],
-	camomons: ['[Gen 8] Camomons'],
+	camomons: ['Camomons Mod'],
 	'350cup': ['350 Cup Mod'],
 	flipped: ['Flipped Mod'],
 	scalemons: ['Scalemons Mod'],
@@ -252,6 +270,7 @@ const regionNames: RegionNames = {
 	alola: "Alola",
 	galar: "Galar",
 	hisui: "Hisui",
+	paldea: "Paldea",
 };
 
 export class Dex {
@@ -283,9 +302,12 @@ export class Dex {
 	private itemsList: readonly IItem[] | null = null;
 	private readonly isEvolutionFamilyCache: Dict<boolean> = Object.create(null);
 	private readonly learnsetDataCache: Dict<ILearnsetData> = Object.create(null);
+	private loadedMods: boolean = false;
 	private readonly moveCache: Dict<IMove> = Object.create(null);
 	private movesList: readonly IMove[] | null = null;
 	private readonly moveAvailbilityCache: Dict<number> = Object.create(null);
+	private readonly moveAvailbilityPokemonCache: Dict<string[]> = Object.create(null);
+	private nationalDexPokemonList: readonly IPokemon[] | null = null;
 	private readonly natureCache: Dict<INature> = Object.create(null);
 	private readonly pokemonCache: Dict<IPokemon> = Object.create(null);
 	private pokemonList: readonly IPokemon[] | null = null;
@@ -310,20 +332,20 @@ export class Dex {
 		const isBase = mod === 'base';
 		if (isBase) {
 			this.dexes.base = this;
-			this.dexes[CURRENT_GEN_STRING] = this;
+			this.dexes[CURRENT_GEN_MOD] = this;
 
-			const dataDist = ".data-dist";
-			const simDist = ".sim-dist";
+			const dataDist = "dist/data";
+			const simDist = "dist/sim";
 
-			// eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-member-access
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			this.pokemonShowdownDexModule = require(path.join(Tools.pokemonShowdownFolder, simDist, "dex.js")) as IPokemonShowdownDexModule;
 			this.pokemonShowdownDex = this.pokemonShowdownDexModule.Dex;
 
-			// eslint-disable-next-line max-len, @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-member-access
+			// eslint-disable-next-line max-len, @typescript-eslint/no-var-requires
 			this.pokemonShowdownValidatorModule = require(path.join(Tools.pokemonShowdownFolder, simDist, "team-validator.js")) as IPokemonShowdownValidatorModule;
 			this.pokemonShowdownValidator = this.pokemonShowdownValidatorModule.TeamValidator;
 
-			// eslint-disable-next-line max-len, @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-member-access
+			// eslint-disable-next-line max-len, @typescript-eslint/no-var-requires
 			this.pokemonShowdownTagsModule = require(path.join(Tools.pokemonShowdownFolder, dataDist, "tags.js")) as IPokemonShowdownTagsModule;
 			this.pokemonShowdownTags = this.pokemonShowdownTagsModule.Tags;
 		} else {
@@ -402,8 +424,8 @@ export class Dex {
 		return regionNames;
 	}
 
-	getCurrentGenString(): string {
-		return CURRENT_GEN_STRING;
+	getCurrentGenMod(): string {
+		return CURRENT_GEN_MOD;
 	}
 
 	getCustomRuleAliases(): Readonly<Dict<string[]>> {
@@ -443,7 +465,12 @@ export class Dex {
 	}
 
 	getDex(mod?: string): Dex {
-		if (!mod) mod = CURRENT_GEN_STRING;
+		if (!mod) mod = CURRENT_GEN_MOD;
+
+		if (mod !== CURRENT_GEN_MOD && !this.dexes.base.loadedMods) {
+			this.dexes.base.loadMods();
+		}
+
 		return this.dexes[mod];
 	}
 
@@ -698,6 +725,16 @@ export class Dex {
 		return this.moveAvailbilityCache[move.id];
 	}
 
+	/**Excludes Smeargle for ease of use with `Dex.isEvolutionFamily()` */
+	getMoveAvailabilityPokemon(move: IMove): string[] {
+		if (move.gen > this.gen) throw new Error("Dex.getMoveAvailabilityPokemon called for " + move.name + " in gen " + this.gen);
+		return this.moveAvailbilityPokemonCache[move.id];
+	}
+
+	isSignatureMove(move: IMove): boolean {
+		return move.id === 'volttackle' || this.isEvolutionFamily(this.getMoveAvailabilityPokemon(move));
+	}
+
 	/*
 		Pokemon
 	*/
@@ -724,6 +761,17 @@ export class Dex {
 			} else if (pokemon.tier === '(PU)') {
 				pokemon.tier = 'ZU';
 			}
+
+			if (pokemon.doublesTier === '(DUU)') {
+				pokemon.doublesTier = 'DNU';
+			}
+
+			if (pokemon.natDexTier === '(NU)') {
+				pokemon.natDexTier = 'PU';
+			} else if (pokemon.natDexTier === '(PU)') {
+				pokemon.natDexTier = 'ZU';
+			}
+
 			this.pokemonCache[id] = pokemon;
 		}
 
@@ -740,19 +788,40 @@ export class Dex {
 		return Tools.deepClone(typeof name === 'string' ? this.getExistingPokemon(name) : name) as IPokemonCopy;
 	}
 
-	/** Returns a list of existing Pokemon */
-	getPokemonList(): readonly IPokemon[] {
-		if (this.pokemonList) return this.pokemonList;
+	/** Returns a list of Pokemon that can be found in /ds or /nds */
+	getPokemonList(nationalDex?: boolean): readonly IPokemon[] {
+		if (nationalDex) {
+			if (this.nationalDexPokemonList) return this.nationalDexPokemonList;
+		} else {
+			if (this.pokemonList) return this.pokemonList;
+		}
 
 		const pokedex: IPokemon[] = [];
 		for (const i of this.getData().pokemonKeys) {
-			const pokemon = this.getExistingPokemon(i);
-			if (pokemon.isNonstandard === 'CAP' || pokemon.isNonstandard === 'LGPE' || pokemon.isNonstandard === 'Custom' ||
-				pokemon.isNonstandard === 'Unobtainable') continue;
-			pokedex.push(pokemon);
+			const species = this.getExistingPokemon(i);
+			if (species.tier.startsWith("CAP")) continue;
+
+			if (
+				species.gen <= this.gen &&
+				(
+					(
+						nationalDex &&
+						species.isNonstandard &&
+						!["Custom", "Glitch", "Pokestar", "Future"].includes(species.isNonstandard)
+					) ||
+					(species.tier !== 'Unreleased' && species.tier !== 'Illegal')
+				)
+			) {
+				pokedex.push(species);
+			}
 		}
 
-		this.pokemonList = pokedex;
+		if (nationalDex) {
+			this.nationalDexPokemonList = pokedex;
+		} else {
+			this.pokemonList = pokedex;
+		}
+
 		return pokedex;
 	}
 
@@ -825,6 +894,12 @@ export class Dex {
 
 		const potentialEvolutionLines: string[][] = this.getAllEvolutionLines(pokemon);
 		const formesToCheck: string[] = [pokemon.name];
+
+		// use base forme by default if included formes aren't specified
+		if (!sortedFormes && pokemon.forme && pokemon.baseSpecies !== pokemon.name && !pokemon.prevo && !pokemon.evos.length) {
+			sortedFormes = [pokemon.baseSpecies];
+		}
+
 		if (sortedFormes) {
 			for (const name of sortedFormes) {
 				const forme = this.getPokemon(name);
@@ -906,6 +981,22 @@ export class Dex {
 
 		this.isEvolutionFamilyCache[cacheKey] = true;
 		return true;
+	}
+
+	getPokemonAnalysisLink(pokemon: IPokemon, format?: IFormat): string {
+		const gen = format && format.gen ? format.gen : this.gen;
+		return Tools.smogonDexPrefix + smogonDexGenPaths[gen] + "/pokemon/" + pokemon.id + "/";
+	}
+
+	getPokemonUsableAbility(pokemon: IPokemon, format: IFormat): string | undefined {
+		if (format.gen < 3) return undefined;
+
+		const usableAbilities = this.getUsableAbilities(format);
+		for (const i in pokemon.abilities) {
+			// @ts-expect-error
+			const ability = this.getAbility(pokemon.abilities[i]); // eslint-disable-line @typescript-eslint/no-unsafe-argument
+			if (ability && usableAbilities.includes(ability.name)) return ability.name;
+		}
 	}
 
 	getType(name: string): ITypeData | undefined {
@@ -1251,7 +1342,7 @@ export class Dex {
 	}
 
 	getPlaceholderSprite(): string {
-		return '<img src="//' + Tools.mainServer + '/sprites/gen5/0.png" width="96" height="96" />';
+		return '<img src="' + Tools.spritePrefix + '/gen5/0.png" width="96" height="96" />';
 	}
 
 	getPokemonModel(pokemon: IPokemon, generation?: ModelGeneration, direction?: 'front' | 'back', shiny?: boolean): string {
@@ -1260,7 +1351,7 @@ export class Dex {
 		const bw = generation === 'bw';
 		const xy = generation === 'xy';
 
-		let prefix = '//' + Tools.mainServer + '/sprites/';
+		let prefix = Tools.spritePrefix + '/';
 		let suffix = '.png';
 		if (generation === 'rb') {
 			prefix += 'gen1';
@@ -1294,7 +1385,7 @@ export class Dex {
 			if (Object.prototype.hasOwnProperty.call(gifDataBW, pokemon.id)) pokemonGifData = gifDataBW[pokemon.id];
 		} else if (xy) {
 			if (Config.afd) {
-				prefix = '//' + Tools.mainServer + '/sprites/afd';
+				prefix = Tools.spritePrefix + '/afd';
 				suffix = '.png';
 				if (shiny) {
 					prefix += '-shiny';
@@ -1342,7 +1433,7 @@ export class Dex {
 		const facingLeftStyle = facingLeft ? "transform:scaleX(-1);webkit-transform:scaleX(-1);" : "";
 		return '<span style="display: inline-block;height: ' + POKEMON_ICON_HEIGHT + 'px;width: ' + POKEMON_ICON_WIDTH + 'px;' +
 			(border ? 'border: ' + border + ';' : '') + 'image-rendering: pixelated;' +
-			'background:transparent url(https://' + Tools.mainServer + '/sprites/pokemonicons-sheet.png?v6) no-repeat scroll -' + left +
+			'background:transparent url(https://' + Tools.mainServer + '/sprites/pokemonicons-sheet.png?v9) no-repeat scroll -' + left +
 			'px -' + top + 'px;' + facingLeftStyle + '"></span>';
 	}
 
@@ -1359,7 +1450,7 @@ export class Dex {
 		const top = Math.floor(num / 16) * height;
 		const left = (num % 16) * width;
 		return '<span style="display: inline-block;height: ' + height + 'px;width: ' + width + 'px;image-rendering: pixelated;' +
-			'background:transparent url(https://' + Tools.mainServer + '/sprites/itemicons-sheet.png?g8) no-repeat scroll -' + left +
+			'background:transparent url(https://' + Tools.mainServer + '/sprites/itemicons-sheet.png?g9) no-repeat scroll -' + left +
 			'px -' + top + 'px;"></span>';
 	}
 
@@ -1368,7 +1459,7 @@ export class Dex {
 	}
 
 	getMoveCategoryIcon(move: IMove): string {
-		return '<img src="//' + Tools.mainServer + '/sprites/categories/' + move.category + '.png" width="32" height="14" />';
+		return '<img src="' + Tools.spritePrefix + '/categories/' + move.category + '.png" width="32" height="14" />';
 	}
 
 	getTrainerSpriteId(name: string): string | undefined {
@@ -1387,19 +1478,19 @@ export class Dex {
 	}
 
 	getTrainerSprite(id: string): string {
-		return '<img src="//' + Tools.mainServer + '/sprites/trainers/' + id + '.png" width=' + TRAINER_SPRITE_DIMENSIONS + 'px ' +
+		return '<img src="' + Tools.spritePrefix + '/trainers/' + id + '.png" width=' + TRAINER_SPRITE_DIMENSIONS + 'px ' +
 			'height=' + TRAINER_SPRITE_DIMENSIONS + 'px />';
 	}
 
 	getCustomTrainerSprite(id: string): string {
 		if (id.charAt(0) === '#') id = id.substr(1);
 
-		return '<img src="//' + Tools.mainServer + '/sprites/trainers-custom/' + id + '.png" width=' + TRAINER_SPRITE_DIMENSIONS + 'px ' +
+		return '<img src="' + Tools.spritePrefix + '/trainers-custom/' + id + '.png" width=' + TRAINER_SPRITE_DIMENSIONS + 'px ' +
 			'height=' + TRAINER_SPRITE_DIMENSIONS + 'px />';
 	}
 
 	getTypeHtml(type: ITypeData, width?: number): string {
-		return Tools.getHexLabel(Tools.getTypeHexCode(type.name)!, type.name, width);
+		return Tools.getTypeOrColorLabel(Tools.getTypeHexCode(type.name)!, type.name, width);
 	}
 
 	/*
@@ -1488,25 +1579,34 @@ export class Dex {
 					customRuleFormats[formatId].banlist);
 				name = customRuleSplit[0];
 				allCustomRules = allCustomRules.concat(customRuleSplit[1]);
+			} else if (formatId.startsWith(OM_OF_THE_MONTH_PREFIX)) {
+				const index = parseInt(formatId.substr(OM_OF_THE_MONTH_PREFIX.length) || '1');
+				if (!isNaN(index)) {
+					const omotm = omotms[index - 1];
+					if (omotm) name = omotm;
+				}
+			} else if (formatId.startsWith(ROA_SPOTLIGHT_PREFIX)) {
+				const index = parseInt(formatId.substr(ROA_SPOTLIGHT_PREFIX.length) || '1');
+				if (!isNaN(index)) {
+					const roas = roaSpotlights[index - 1];
+					if (roas) name = roas;
+				}
 			} else {
-				if (formatId.startsWith(OM_OF_THE_MONTH_PREFIX)) {
-					const index = parseInt(formatId.substr(OM_OF_THE_MONTH_PREFIX.length) || '1');
-					if (!isNaN(index)) {
-						const omotm = omotms[index - 1];
-						if (omotm) name = omotm;
-					}
-				} else if (formatId.startsWith(ROA_SPOTLIGHT_PREFIX)) {
-					const index = parseInt(formatId.substr(ROA_SPOTLIGHT_PREFIX.length) || '1');
-					if (!isNaN(index)) {
-						const roas = roaSpotlights[index - 1];
-						if (roas) name = roas;
+				for (let i = CURRENT_GEN; i >= 1; i--) {
+					const genFormatId = 'gen' + i + formatId;
+					if (genFormatId in customRuleFormats) {
+						const customRuleSplit = this.splitNameAndCustomRules(customRuleFormats[genFormatId].format + '@@@' +
+							customRuleFormats[genFormatId].banlist);
+						name = customRuleSplit[0];
+						allCustomRules = allCustomRules.concat(customRuleSplit[1]);
+						break;
 					}
 				}
 			}
 
 			let baseFormat = this.pokemonShowdownDex.formats.get(name);
 			if (!baseFormat.exists) {
-				for (let i = CURRENT_GEN - 1; i >= 1; i--) {
+				for (let i = CURRENT_GEN; i >= 1; i--) {
 					baseFormat = this.pokemonShowdownDex.formats.get('gen' + i + name);
 					if (baseFormat.exists) break;
 				}
@@ -1730,9 +1830,10 @@ export class Dex {
 		}
 
 		if (tag === 'ability') {
+			if (Tools.toId(ruleName) === 'noability') return 'Empty Ability';
 			ruleName = this.dexes.base.getExistingAbility(ruleName).name;
 		} else if (tag === 'item') {
-			if (Tools.toId(ruleName) === 'noitem') return 'No Item';
+			if (Tools.toId(ruleName) === 'noitem') return 'Empty Item';
 			ruleName = this.dexes.base.getExistingItem(ruleName).name;
 		} else if (tag === 'move') {
 			ruleName = this.dexes.base.getExistingMove(ruleName).name;
@@ -1847,11 +1948,13 @@ export class Dex {
 
 		const formatDex = format.mod in this.dexes ? this.dexes[format.mod] : this;
 		const usableAbilities: string[] = [];
-		for (const i of formatDex.getData().abilityKeys) {
-			// PS ability.id compatibility
-			const ability = formatDex.pokemonShowdownDex.abilities.get(i);
-			if (!validator.checkAbility({}, ability, {})) {
-				usableAbilities.push(ability.name);
+		if (formatDex.getGen() >= 3) {
+			for (const i of formatDex.getData().abilityKeys) {
+				// PS ability.id compatibility
+				const ability = formatDex.pokemonShowdownDex.abilities.get(i);
+				if (!validator.checkAbility({}, ability, {})) {
+					usableAbilities.push(ability.name);
+				}
 			}
 		}
 
@@ -2202,10 +2305,11 @@ export class Dex {
 		return Tools.getCombinations(...poolByFormes);
 	}
 
-	getPossibleTeams(previousTeams: readonly string[][], pool: readonly string[], options: IGetPossibleTeamsOptions): string[][] {
+	getPossibleTeams(previousTeams: readonly string[][], pool: readonly string[] | undefined,
+		options: IGetPossibleTeamsOptions): string[][] {
 		if (options.requiredAddition) {
 			if (!options.additions) throw new Error("Cannot require 0 additions");
-			if (!pool.length) throw new Error("Cannot require " + options.additions + " additions from empty pool");
+			if (!pool || !pool.length) throw new Error("Cannot require " + options.additions + " additions from empty pool");
 		}
 		if (options.additions && options.additions < 1) throw new Error("Use options.drops instead of negative additions");
 
@@ -2261,7 +2365,7 @@ export class Dex {
 		let additions = options.additions || 0;
 		if (additions) {
 			const filteredPool: string[] = [];
-			for (const item of pool) {
+			for (const item of pool!) {
 				let name = item;
 				if (options.allowFormes) {
 					name = this.getExistingPokemon(name).baseSpecies;
@@ -2721,22 +2825,37 @@ export class Dex {
 		this.dataCache!.gifDataBW = gifDataBW;
 	}
 
+	private loadMods(): void {
+		if (this.isBase && !this.loadedMods) {
+			this.loadData();
+
+			this.pokemonShowdownDex.includeMods();
+			this.pokemonShowdownDex.includeModData();
+
+			for (const key of this.dataCache!.formatKeys) {
+				const format = this.getExistingFormat(key);
+				if (format.mod && !(format.mod in this.dexes)) {
+					this.dexes[format.mod] = new Dex(this.dexes, this.pokemonShowdownDex.forFormat(format).gen, format.mod);
+				}
+			}
+
+			this.loadedMods = true;
+		}
+	}
+
 	private loadData(): void {
 		if (this.dataCache) return;
 
 		if (this.isBase) {
-			this.pokemonShowdownDex.includeMods();
-			this.pokemonShowdownDex.includeModData();
-
-			const baseCustomRuleFormats = Object.keys(customRuleFormats);
+			const baseCustomRuleFormatKeys = Object.keys(baseCustomRuleFormats);
 			for (let i = CURRENT_GEN; i > 0; i--) {
 				const gen = 'gen' + i;
-				for (const name of baseCustomRuleFormats) {
-					const format = gen + customRuleFormats[name].format;
+				for (const name of baseCustomRuleFormatKeys) {
+					const format = gen + baseCustomRuleFormats[name].format;
 					if (!this.pokemonShowdownDex.formats.get(format).exists) continue;
 
 					customRuleFormats[gen + name] = {
-						banlist: customRuleFormats[name].banlist,
+						banlist: baseCustomRuleFormats[name].banlist,
 						format,
 					};
 				}
@@ -2794,8 +2913,8 @@ export class Dex {
 			filteredTypeKeys.push(key);
 		}
 
-		const validator = new this.pokemonShowdownValidator(this.gen === 8 ? "gen8nationaldex" : "gen" + this.gen + "ou",
-			this.dexes.base.pokemonShowdownDex);
+		const validator = new this.pokemonShowdownValidator(this.gen === 9 ? "gen9nationaldex" : this.gen === 8 ? "gen8nationaldex" :
+			"gen" + this.gen + "ou", this.dexes.base.pokemonShowdownDex);
 		const lcFormat = this.pokemonShowdownDex.formats.get("gen" + this.gen + "lc");
 
 		const pokemonKeys = this.pokemonShowdownDex.species.all().map(x => x.id);
@@ -2917,9 +3036,6 @@ export class Dex {
 		if (this.isBase) {
 			for (const key of data.formatKeys) {
 				const format = this.getExistingFormat(key);
-				if (format.mod && !(format.mod in this.dexes)) {
-					this.dexes[format.mod] = new Dex(this.dexes, this.pokemonShowdownDex.forFormat(format).gen, format.mod);
-				}
 
 				if (format.section === OM_OF_THE_MONTH) {
 					omotms.push(format.id);
@@ -3104,13 +3220,16 @@ export class Dex {
 
 	private cacheMoveAvailability(move: IMove, pokedex: IPokemon[]): void {
 		let availability = 0;
+		const availabilityPokemon: string[] = [];
 		for (const pokemon of pokedex) {
 			if (this.getAllPossibleMoves(pokemon).includes(move.id)) {
 				availability++;
+				if (pokemon.id !== 'smeargle') availabilityPokemon.push(pokemon.name);
 			}
 		}
 
 		this.moveAvailbilityCache[move.id] = availability;
+		this.moveAvailbilityPokemonCache[move.id] = availabilityPokemon;
 	}
 
 	private getAllEvolutionLines(pokemon: IPokemon, prevoList?: string[], evolutionLines?: string[][]): string[][] {

@@ -14,13 +14,21 @@ export interface IMessageParserFile {
 	priority: number;
 }
 
-export type IOutgoingMessageTypes = 'command' | 'chat' | 'chat-html' | 'chat-uhtml' | 'private-html' | 'pm' | 'pm-html' | 'pm-uhtml' |
-	'code' | 'join-room' | 'leave-room' | 'modchat' | 'filters-view' | 'banword-list' | 'room-voice' | 'room-deauth' | 'warn' |
-	'hangman-start' | 'hangman-end' | 'htmlpage' | 'htmlpageselector' | 'closehtmlpage' | 'highlight-htmlpage' | 'announce' | 'notifyrank' |
-	'notifyoffrank' | 'modnote' | 'tournament-create' | 'tournament-start' | 'tournament-end' | 'tournament-name' | 'tournament-autostart' |
-	'tournament-autodq' | 'tournament-runautodq' | 'tournament-cap' | 'tournament-rules' | 'tournament-forcepublic' |
-	'tournament-forcetimer' | 'tournament-scouting' | 'tournament-modjoin' | 'tournament-disqualify' | 'notifyuser' | 'notifyoffuser' |
-	'query-userdetails' | 'query-rooms' | 'query-roominfo' | 'blockchallenges' | 'trn' | 'avatar' | 'allowpmlog' | 'create-groupchat';
+export interface IParsedIncomingMessage<T = IClientMessageTypes> {
+	incomingMessage: string;
+	whole: string;
+	type: keyof T;
+	parts: readonly string[];
+}
+
+export type IOutgoingMessageTypes = 'command' | 'chat' | 'chat-html' | 'chat-uhtml' | 'chat-uhtml-change' | 'private-html' |
+	'private-uhtml' | 'private-uhtml-change' | 'pm' | 'pm-html' | 'pm-uhtml' | 'pm-uhtml-change' | 'code' | 'join-room' | 'leave-room' |
+	'modchat' | 'filters-view' | 'banword-list' | 'room-voice' | 'room-deauth' | 'warn' | 'hangman-start' | 'hangman-end' | 'htmlpage' |
+	'htmlpageselector' | 'closehtmlpage' | 'highlight-htmlpage' | 'announce' | 'notifyrank' | 'notifyoffrank' | 'modnote' |
+	'tournament-create' | 'tournament-start' | 'tournament-end' | 'tournament-name' | 'tournament-autostart' | 'tournament-autodq' |
+	'tournament-runautodq' | 'tournament-cap' | 'tournament-rules' | 'tournament-forcepublic' | 'tournament-forcetimer' |
+	'tournament-scouting' | 'tournament-modjoin' | 'tournament-disqualify' | 'notifyuser' | 'notifyoffuser' | 'query-userdetails' |
+	'query-rooms' | 'query-roominfo' | 'blockchallenges' | 'trn' | 'avatar' | 'allowpmlog' | 'create-groupchat';
 
 export interface IOutgoingMessageAttributes {
 	filterSend?: () => boolean;
@@ -37,12 +45,14 @@ export interface IOutgoingMessageAttributes {
 	notifyTitle?: string;
 	notifyMessage?: string;
 	pageId?: string;
+	rawHtml?: string;
 	roomid?: string;
 	selector?: string;
 	slowerCommand?: boolean;
 	text?: string;
 	uhtmlName?: string;
 	userid?: string;
+	userDetailsId?: string;
 	warnReason?: string;
 }
 
@@ -107,12 +117,12 @@ export interface IRoomsResponse {
 }
 
 export interface IUserDetailsResponse {
-	autoconfirmed: boolean;
-	avatar: number | string;
+	autoconfirmed: boolean | undefined;
+	avatar: number | string | undefined;
 	customgroup: string | undefined;
-	group: string;
+	group: string | undefined;
 	name: string;
-	status: string;
+	status: string | undefined;
 	userid: string;
 }
 

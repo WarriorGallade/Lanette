@@ -1,4 +1,4 @@
-import type { Room } from "../../rooms";
+import type { HtmlPageBase } from "../html-page-base";
 import type { IComponentProps } from "./component-base";
 import { ComponentBase } from "./component-base";
 
@@ -33,6 +33,7 @@ const tagName = 'textInput';
 
 export class TextInput<OutputType = string> extends ComponentBase<ITextInputProps<OutputType>> {
 	componentId: string = 'text-input';
+	afterSubmitHtml: string = "";
 	clearCommand: string = 'clear';
 	currentInput: string | undefined = undefined;
 	currentOutput: OutputType | undefined = undefined;
@@ -42,12 +43,20 @@ export class TextInput<OutputType = string> extends ComponentBase<ITextInputProp
 	clearText: string;
 	submitText: string;
 
-	constructor(room: Room, parentCommandPrefix: string, componentCommand: string, props: ITextInputProps<OutputType>) {
-		super(room, parentCommandPrefix, componentCommand, props);
+	constructor(htmlPage: HtmlPageBase, parentCommandPrefix: string, componentCommand: string, props: ITextInputProps<OutputType>) {
+		super(htmlPage, parentCommandPrefix, componentCommand, props);
 
 		if (props.currentInput) this.currentInput = props.currentInput;
 		this.clearText = props.clearText || "Clear";
 		this.submitText = props.submitText || "Submit";
+	}
+
+	updateSubmitText(text: string): void {
+		this.submitText = text;
+	}
+
+	updateAfterSubmitHtml(html: string): void {
+		this.afterSubmitHtml = html;
 	}
 
 	parentClearInput(): void {
@@ -72,10 +81,10 @@ export class TextInput<OutputType = string> extends ComponentBase<ITextInputProp
 
 	submit(input: string): void {
 		if (this.props.stripHtmlCharacters) input = Tools.stripHtmlCharacters(input);
-		this.currentInput = input;
+		this.currentInput = Tools.unescapeHTML(input);
 		this.errors = [];
 
-		this.onSubmit(input);
+		this.onSubmit(this.currentInput);
 
 		if (this.props.validateSubmission) {
 			const validation = this.props.validateSubmission(this.currentInput, this.currentOutput);
@@ -83,6 +92,8 @@ export class TextInput<OutputType = string> extends ComponentBase<ITextInputProp
 			if (validation.currentOutput) this.currentOutput = validation.currentOutput;
 			if (validation.errors) this.errors = this.errors.concat(validation.errors);
 		}
+
+		this.currentInput = Tools.escapeHTML(this.currentInput);
 
 		if (this.errors.length) {
 			this.props.onErrors(this.errors);
@@ -118,8 +129,8 @@ export class TextInput<OutputType = string> extends ComponentBase<ITextInputProp
 			html += "<br />";
 		}
 
-		html += "<form data-submitsend='/msgroom " + this.room.id + ", /botmsg " + Users.self.name + ", " + this.commandPrefix + ", " +
-			this.submitCommand + ", {" + tagName + "}'>";
+		html += "<form data-submitsend='/msgroom " + this.htmlPage.room.id + ", /botmsg " + Users.self.name + ", " +
+			this.commandPrefix + ", " + this.submitCommand + ", {" + tagName + "}'>";
 
 		if (this.props.label) html += this.props.label + ":&nbsp;";
 		if (this.props.textArea) {
@@ -149,6 +160,8 @@ export class TextInput<OutputType = string> extends ComponentBase<ITextInputProp
 			html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + this.clearCommand, this.clearText,
 				{disabled: !this.currentInput});
 		}
+
+		html += this.afterSubmitHtml;
 
 		html += "</form>";
 

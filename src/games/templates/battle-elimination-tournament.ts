@@ -5,9 +5,9 @@ import type { IClientTournamentData } from "../../types/tournaments";
 import { game as battleEliminationGame, BattleElimination } from "./battle-elimination";
 
 const GROUPCHAT_SUFFIX = "Games";
-const AUTO_DQ_MINUTES = 3;
 
 export abstract class BattleEliminationTournament extends BattleElimination {
+	autoDqMinutes: number = 3;
 	requiresAutoconfirmed = false;
 	startAutoDqTimer: NodeJS.Timer | undefined;
 	tournamentCreated: boolean = false;
@@ -20,7 +20,7 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 	afterInitialize(): void {
 		super.afterInitialize();
 
-		this.firstRoundTime = (AUTO_DQ_MINUTES * 60 * 1000) + this.firstRoundExtraTime;
+		this.firstRoundTime = (this.autoDqMinutes * 60 * 1000) + this.firstRoundExtraTime;
 
 		if (Config.tournamentGamesSubRoom && this.room.id in Config.tournamentGamesSubRoom) {
 			const subRoom = Rooms.get(Config.tournamentGamesSubRoom[this.room.id]);
@@ -38,10 +38,15 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 			if (subRoom) {
 				this.subRoom = subRoom;
 			} else {
+				this.creatingSubRoom = true;
+
 				Rooms.addCreateListener(id, room => {
 					this.subRoom = room;
+					this.creatingSubRoom = false;
+					this.startAdvertisements();
 					if (this.signupsStarted) this.createTournament();
 				});
+
 				this.roomCreateListeners.push(id);
 
 				Client.joinRoom(id);
@@ -49,6 +54,103 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 				this.room.createSubRoomGroupchat(name);
 			}
 		}
+	}
+
+	getCustomRules(): string[] {
+		const customRules = this.battleFormat.customRules ? this.battleFormat.customRules.slice() : [];
+		if (!this.usesCloakedPokemon) {
+			const allPokemon: string[] = [];
+			const checkedPokemon: Dict<boolean> = {};
+
+			for (const name of this.pokedex) {
+				const pokemon = Dex.getExistingPokemon(name);
+
+				const formes = this.allowsFormes ? Dex.getFormes(pokemon, true) : [pokemon.name];
+				const usableFormes: string[] = [];
+				for (const forme of formes) {
+					if (this.battleFormat.usablePokemon!.includes(forme)) usableFormes.push(forme);
+				}
+
+				if (this.evolutionsPerRound) {
+					const evolutionLines = Dex.getEvolutionLines(pokemon, usableFormes);
+					for (const line of evolutionLines) {
+						for (const stage of line) {
+							if (stage in checkedPokemon) continue;
+
+							const stageFormes = this.allowsFormes ? Dex.getFormes(Dex.getExistingPokemon(stage), true) : [stage];
+							const usableStageFormes: string[] = [];
+							for (const stageForme of stageFormes) {
+								if (this.battleFormat.usablePokemon!.includes(stageForme)) usableStageFormes.push(stageForme);
+							}
+
+							let addBaseModifier = false;
+							if (!Dex.getExistingPokemon(stage).forme && usableStageFormes.length !== stageFormes.length) {
+								for (const usableStageForme of usableStageFormes) {
+									if (!Dex.getExistingPokemon(usableStageForme).forme) {
+										addBaseModifier = true;
+										break;
+									}
+								}
+							}
+
+							if (addBaseModifier) {
+								const baseModifier = stage + "-Base";
+								if (!allPokemon.includes(baseModifier)) allPokemon.push(baseModifier);
+							}
+
+							for (const usableStageForme of usableStageFormes) {
+								if (addBaseModifier && usableStageForme === stage) continue;
+
+								if (!allPokemon.includes(usableStageForme)) allPokemon.push(usableStageForme);
+							}
+
+							checkedPokemon[stage] = true;
+						}
+					}
+				} else {
+					let addBaseModifier = false;
+					if (!pokemon.forme && usableFormes.length !== formes.length) {
+						for (const forme of usableFormes) {
+							if (!Dex.getExistingPokemon(forme).forme) {
+								addBaseModifier = true;
+								break;
+							}
+						}
+					}
+
+					if (addBaseModifier) {
+						const baseModifier = pokemon.name + "-Base";
+						if (!allPokemon.includes(baseModifier)) allPokemon.push(baseModifier);
+					}
+
+					for (const usableForme of usableFormes) {
+						if (addBaseModifier && usableForme === pokemon.name) continue;
+
+						if (!allPokemon.includes(usableForme)) allPokemon.push(usableForme);
+					}
+				}
+			}
+
+			const pokemonListRules = Dex.getCustomRulesForPokemonList(allPokemon);
+			for (const rule of pokemonListRules) {
+				if (!customRules.includes(rule)) customRules.push(rule);
+			}
+		}
+
+		if (this.getGameCustomRules) {
+			const ruleTable = Dex.getRuleTable(this.battleFormat);
+			const gameCustomRules = this.getGameCustomRules();
+			for (const rule of gameCustomRules) {
+				try {
+					const validated = Dex.validateRule(rule);
+					if (typeof validated === 'string' && !ruleTable.has(validated) && !customRules.includes(validated)) {
+						customRules.push(validated);
+					}
+				} catch (e) {} // eslint-disable-line no-empty
+			}
+		}
+
+		return customRules;
 	}
 
 	createTournament(): void {
@@ -64,14 +166,17 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 			callback: () => {
 				if (this.timeout) clearTimeout(this.timeout);
 
-				this.subRoom.nameTournament(this.name);
 				this.subRoom.forcePublicTournament();
 				this.subRoom.forceTimerTournament();
 				this.subRoom.disallowTournamentScouting();
 				this.subRoom.disallowTournamentModjoin();
 
 				const customRules = this.getCustomRules();
-				if (customRules.length) this.subRoom.setTournamentRules(customRules.join(","));
+				if (customRules.length) {
+					this.subRoom.setTournamentRules(customRules.join(","));
+
+					this.pokedex = this.shuffle(this.pokedex);
+				}
 
 				this.subRoom.announce("You must join the tournament in this room to play!" +
 					(!this.canRejoin ? " Once you leave, you cannot re-join." : ""));
@@ -80,18 +185,34 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 			},
 		};
 
-		this.timeout = setTimeout(() => {
+		this.setTimeout(() => {
 			if (!this.subRoom.tournament) {
 				this.say("The tournament could not be created.");
 				this.deallocate(true);
 			}
-		}, 15 * 1000);
+		}, 30 * 1000);
 
-		this.subRoom.createTournament(this.battleFormat, 'elimination', this.playerCap);
+		Tournaments.createTournament(this.subRoom, {format: this.battleFormat, cap: this.playerCap, name: this.name});
 	}
 
 	onSignups(): void {
 		super.onSignups();
+
+		this.debugLog("Original Pokedex size: " + this.pokedex.length);
+
+		if (!this.usesCloakedPokemon) {
+			// limit pokedex size for custom rules
+			const maxPokemon = Math.max(this.getMinimumPokedexSizeForPlayers(this.maxPlayers - 1),
+				this.getMinimumPokedexSizeForPlayers(this.maxPlayers));
+
+			this.debugLog("Max Pokemon: " + maxPokemon + " (for " + this.maxPlayers + " max players)");
+
+			if (this.pokedex.length > maxPokemon) {
+				this.pokedex = this.pokedex.slice(0, maxPokemon);
+
+				this.debugLog("Reduced Pokedex size: " + this.pokedex.length);
+			}
+		}
 
 		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 		if (this.subRoom && this.subRoom.initialized) {
@@ -157,27 +278,6 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 
 	onTournamentBracketUpdate(players: Dict<Player>, clientTournamentData: IClientTournamentData, tournamentStarted: boolean): void {
 		if (tournamentStarted) this.createBracketFromClientData(players, clientTournamentData);
-	}
-
-	onTournamentUsersUpdate(players: Dict<Player>, users: string[]): void {
-		const ids: string[] = [];
-		const extraPlayers: string[] = [];
-		for (const user of users) {
-			const id = Tools.toId(user);
-			ids.push(id);
-			if (!(id in this.players)) extraPlayers.push(user);
-		}
-
-		const missingPlayers: Player[] = [];
-		for (const i in this.players) {
-			if (!ids.includes(this.players[i].id)) missingPlayers.push(this.players[i]);
-		}
-
-		if (missingPlayers.length === 1 && extraPlayers.length === 1) {
-			this.debugLog("Missed rename in signups: " + missingPlayers[0].name + " -> " + extraPlayers[0]);
-
-			this.renamePlayer(extraPlayers[0], Tools.toId(extraPlayers[0]), missingPlayers[0].id);
-		}
 	}
 
 	createBracketFromClientData(players: Dict<Player>, clientTournamentData?: IClientTournamentData): void {
@@ -278,8 +378,8 @@ export abstract class BattleEliminationTournament extends BattleElimination {
 		super.startElimination();
 
 		this.startAutoDqTimer = setTimeout(() => {
-			this.subRoom.setTournamentAutoDq(AUTO_DQ_MINUTES);
-			this.subRoom.tournament!.setAutoDqMinutes(AUTO_DQ_MINUTES);
+			this.subRoom.setTournamentAutoDq(this.autoDqMinutes);
+			this.subRoom.tournament!.setAutoDqMinutes(this.autoDqMinutes);
 		}, this.firstRoundTime);
 
 		const database = Storage.getDatabase(this.room);

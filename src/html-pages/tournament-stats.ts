@@ -1,21 +1,18 @@
 import type { Room } from "../rooms";
 import type { BaseCommandDefinitions } from "../types/command-parser";
 import type { User } from "../users";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 import { TournamentLeaderboard } from "./components/tournament-leaderboard";
 import { TournamentPointsBreakdown } from "./components/tournament-points-breakdown";
 
 const baseCommand = 'tournamentstats';
 const chooseLeaderboard = 'chooseleaderboard';
 const choosePointsBreakdown = 'choosepointsbreakdown';
-const closeCommand = 'close';
 
 const leaderboardCommand = 'tournamentleaderboard';
 const pointsBreakdownCommand = 'tournamentpointsbreakdown';
 
-const pageId = 'tournament-stats';
-
-export const id = pageId;
+export const pageId = 'tournament-stats';
 export const pages: Dict<TournamentStats> = {};
 
 class TournamentStats extends HtmlPageBase {
@@ -28,13 +25,15 @@ class TournamentStats extends HtmlPageBase {
 	constructor(room: Room, user: User) {
 		super(room, user, baseCommand, pages);
 
+		this.setCloseButton();
+
 		const showPreviousCycles = user.isDeveloper() || user.hasRank(room, 'voice');
-		this.tournamentLeaderboard = new TournamentLeaderboard(room, this.commandPrefix, leaderboardCommand, {
+		this.tournamentLeaderboard = new TournamentLeaderboard(this, this.commandPrefix, leaderboardCommand, {
 			showPreviousCycles,
 			reRender: () => this.send(),
 		});
 
-		this.tournamentPointsBreakdown = new TournamentPointsBreakdown(room, this.commandPrefix, pointsBreakdownCommand, {
+		this.tournamentPointsBreakdown = new TournamentPointsBreakdown(this, this.commandPrefix, pointsBreakdownCommand, {
 			showPreviousCycles,
 			reRender: () => this.send(),
 		});
@@ -65,7 +64,7 @@ class TournamentStats extends HtmlPageBase {
 
 	render(): string {
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + " Tournament Stats</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br /><br />";
 
         const leaderboardView = this.currentView === 'leaderboard';
@@ -106,13 +105,13 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new TournamentStats(targetRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new TournamentStats(targetRoom, user);
 
 			if (cmd === chooseLeaderboard) {
 				pages[user.id].chooseLeaderboard();
 			} else if (cmd === choosePointsBreakdown) {
 				pages[user.id].choosePointsBreakdown();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

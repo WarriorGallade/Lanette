@@ -4,12 +4,12 @@ import { HostDisplayBase } from "./host-display-base";
 import { TypePicker } from "./type-picker";
 import type { TrainerGeneration } from "./trainer-picker";
 import {
-	defaultTrainers, genEightTrainers, genFiveTrainers, genFourTrainers, genOneTrainers, genSevenTrainers, genSixTrainers,
+	defaultTrainers, genEightTrainers, genFiveTrainers, genFourTrainers, genNineTrainers, genOneTrainers, genSevenTrainers, genSixTrainers,
 	genThreeTrainers, genTwoTrainers, trainerGens
 } from "./trainer-picker";
-import type { Room } from "../../rooms";
 import type { PokemonChoices, TrainerChoices } from "../game-host-control-panel";
 import { PokemonPickerBase } from "./pokemon-picker-base";
+import type { HtmlPageBase } from "../html-page-base";
 
 const clearPokemon = 'clearpokemon';
 const randomizePokemon = 'randomizepokemon';
@@ -34,10 +34,10 @@ export class RandomHostDisplay extends HostDisplayBase {
 	declare gifPokemonPickers: PokemonPickerRandom[];
 	declare iconPokemonPickers: PokemonPickerRandom[];
 
-	constructor(room: Room, parentCommandPrefix: string, componentCommand: string, props: IHostDisplayProps) {
-		super(room, parentCommandPrefix, componentCommand, props, PokemonPickerRandom);
+	constructor(htmlPage: HtmlPageBase, parentCommandPrefix: string, componentCommand: string, props: IHostDisplayProps) {
+		super(htmlPage, parentCommandPrefix, componentCommand, props, PokemonPickerRandom);
 
-		this.allTypePicker = new TypePicker(room, this.commandPrefix, setTypeCommand, {
+		this.allTypePicker = new TypePicker(htmlPage, this.commandPrefix, setTypeCommand, {
 			noPickName: "Random",
 			onClear: (index, dontRender) => this.clearAllPokemonTypes(dontRender),
 			onPick: (index, type, dontRender) => this.setAllPokemonTypes(type, dontRender),
@@ -485,6 +485,7 @@ export class RandomHostDisplay extends HostDisplayBase {
 				const currentGenSixTrainers = this.currentTrainerGeneration === genSixTrainers;
 				const currentGenSevenTrainers = this.currentTrainerGeneration === genSevenTrainers;
 				const currentGenEightTrainers = this.currentTrainerGeneration === genEightTrainers;
+				const currentGenNineTrainers = this.currentTrainerGeneration === genNineTrainers;
 
 				html += this.getQuietPmButton(this.commandPrefix + ", " + setTrainerGenCommand + ", " + randomTrainerGen,
 					"Random", {selectedAndDisabled: this.currentTrainerGeneration === undefined});
@@ -506,6 +507,8 @@ export class RandomHostDisplay extends HostDisplayBase {
 					"Gen 7", {selectedAndDisabled: currentGenSevenTrainers});
 				html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + setTrainerGenCommand + ", " + genEightTrainers,
 					"Gen 8", {selectedAndDisabled: currentGenEightTrainers});
+				html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + setTrainerGenCommand + ", " + genNineTrainers,
+					"Gen 9", {selectedAndDisabled: currentGenNineTrainers});
 			} else {
 				html += this.trainerPickers[this.trainerPickerIndex].render();
 			}

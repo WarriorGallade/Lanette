@@ -1,5 +1,6 @@
 import path = require('path');
 
+import type { GamePageBase } from './html-pages/activity-pages/game-page-base';
 import type { PRNGSeed } from "./lib/prng";
 import { PRNG } from "./lib/prng";
 import type { Player } from "./room-activity";
@@ -28,10 +29,12 @@ const defaultOptionValues: KeyedDict<DefaultGameOption, IGameNumberOptionValues>
 export class ScriptedGame extends Game {
 	readonly commands = Object.assign(Object.create(null), Games.getSharedCommands()) as LoadedGameCommands;
 	readonly commandsListeners: IGameCommandCountListener[] = [];
+	currentPlayer: Player | null = null;
 	debugLogs: string[] = [];
 	debugLogWriteCount: number = 0;
 	enabledAssistActions = new Map<Player, boolean>();
 	gameActionLocations = new Map<Player, GameActionLocations>();
+	htmlPages = new Map<Player, GamePageBase>();
 	inactiveRounds: number = 0;
 	inheritedPlayers: boolean = false;
 	internalGame: boolean = false;
@@ -239,6 +242,16 @@ export class ScriptedGame extends Game {
 				this.challengeRoundTimes = [speed - 300, speed - 200, speed - 100, speed, speed + 100, speed + 200, speed + 300];
 			}
 		}
+	}
+
+	setBotTurnTimeout(callback: () => void, time: number): void {
+		if (this.botTurnTimeout) clearTimeout(this.botTurnTimeout);
+
+		this.botTurnTimeout = setTimeout(() => {
+			if (this.ended) return;
+
+			callback();
+		}, time);
 	}
 
 	debugLog(log: string): void {
@@ -651,12 +664,6 @@ export class ScriptedGame extends Game {
 			}
 		}
 
-		if (this.usesHtmlPage && !this.dontAutoCloseHtmlPages) {
-			for (const i in this.players) {
-				this.players[i].closeHtmlPage();
-			}
-		}
-
 		const now = Date.now();
 
 		if (this.isMiniGame) {
@@ -719,12 +726,6 @@ export class ScriptedGame extends Game {
 			}
 		}
 
-		if (this.usesHtmlPage && !this.dontAutoCloseHtmlPages) {
-			for (const i in this.players) {
-				this.players[i].closeHtmlPage();
-			}
-		}
-
 		this.ended = true;
 		this.deallocate(true);
 	}
@@ -745,12 +746,29 @@ export class ScriptedGame extends Game {
 		this.gameActionLocations.clear();
 		this.playerCustomBoxes.clear();
 		this.winners.clear();
+		this.htmlPages.clear();
 		if (this.lives) this.lives.clear();
 		if (this.points) this.points.clear();
 	}
 
 	deallocate(forceEnd: boolean): void {
 		if (!this.ended) this.ended = true;
+
+		if (this.htmlPages.size) {
+			this.htmlPages.forEach(htmlPage => {
+				if (this.dontAutoCloseHtmlPages) {
+					htmlPage.sendClosingSnapshot();
+				} else {
+					htmlPage.close();
+				}
+			});
+		}
+
+		if (this.usesHtmlPage) {
+			for (const i in this.players) {
+				this.players[i].closeHtmlPage();
+			}
+		}
 
 		this.cleanupMessageListeners();
 		this.cleanupTimers();
@@ -775,11 +793,11 @@ export class ScriptedGame extends Game {
 
 		if (!this.isPmActivity(this.room)) {
 			if (this.room.tournament && this.room.tournament.battleRoomGame === this) {
-				this.room.tournament.battleRoomGame = undefined; // eslint-disable-line @typescript-eslint/no-unsafe-member-access
+				this.room.tournament.battleRoomGame = undefined;
 			}
 
 			if (this.subRoom && this.subRoom.tournament && this.subRoom.tournament.battleRoomGame === this) {
-				this.subRoom.tournament.battleRoomGame = undefined; // eslint-disable-line @typescript-eslint/no-unsafe-member-access
+				this.subRoom.tournament.battleRoomGame = undefined;
 			}
 
 			// @ts-expect-error
@@ -825,7 +843,7 @@ export class ScriptedGame extends Game {
 		if (!this.isPmActivity(this.room)) {
 			this.afterAddBits();
 
-			if (this.updatedBits || this.updatedDatabase) Storage.tryExportDatabase(this.room.id);
+			if (!this.isMiniGame && (this.updatedBits || this.updatedDatabase)) Storage.tryExportDatabase(this.room.id);
 		}
 
 		Tools.unrefProperties(this, ["ended", "id", "name"]);
@@ -1008,6 +1026,7 @@ export class ScriptedGame extends Game {
 
 	removePlayer(user: User | string, silent?: boolean, notAutoconfirmed?: boolean): void {
 		if (this.isMiniGame) return;
+
 		const player = this.destroyPlayer(user);
 		if (!player) return;
 
@@ -1031,7 +1050,10 @@ export class ScriptedGame extends Game {
 		if (this.commandsListeners.length) {
 			const commandsListeners = this.commandsListeners.slice();
 			for (const listener of commandsListeners) {
-				if (listener.remainingPlayersMax) this.decreaseOnCommandsMax(listener, 1);
+				if (listener.remainingPlayersMax) {
+					this.decreaseOnCommandsMax(listener, 1);
+					if (this.ended) return;
+				}
 			}
 		}
 
@@ -1046,7 +1068,17 @@ export class ScriptedGame extends Game {
 			}
 		}
 
-		if (this.usesHtmlPage) player.closeHtmlPage();
+		if (!this.ended) {
+			const htmlPage = this.htmlPages.get(player);
+			if (htmlPage) {
+				htmlPage.close();
+				this.htmlPages.delete(player);
+			}
+
+			if (this.usesHtmlPage) {
+				player.closeHtmlPage();
+			}
+		}
 	}
 
 	/** Returns `true` if the player has been inactive for the game's inactive round limit */
@@ -1112,7 +1144,7 @@ export class ScriptedGame extends Game {
 		if (player.sentAssistActions) player.clearPrivateUhtml(uhtmlName);
 	}
 
-	sendPlayerActions(player: Player, html: string): void {
+	getGameActionLocation(player: Player): GameActionLocations {
 		if (this.gameActionType && !this.gameActionLocations.has(player)) {
 			const database = Storage.getDatabase(this.room as Room);
 			if (database.gameScriptedOptions && player.id in database.gameScriptedOptions &&
@@ -1124,7 +1156,11 @@ export class ScriptedGame extends Game {
 			}
 		}
 
-		const location = this.gameActionLocations.get(player) || 'chat';
+		return this.gameActionLocations.get(player) || 'chat';
+	}
+
+	sendPlayerActions(player: Player, html: string): void {
+		const location = this.getGameActionLocation(player);
 		if (location === 'htmlpage') {
 			player.sendHtmlPage(html);
 		} else {
@@ -1190,6 +1226,8 @@ export class ScriptedGame extends Game {
 			commandListener.max -= decrement;
 			if (commandListener.count >= commandListener.max) {
 				commandListener.listener(commandListener.lastUserId);
+				if (this.ended) return;
+
 				this.commandsListeners.splice(this.commandsListeners.indexOf(commandListener, 1));
 			}
 		}
@@ -1235,6 +1273,9 @@ export class ScriptedGame extends Game {
 		} else {
 			if (commandDefinition.pmOnly) return false;
 		}
+
+		this.debugLog(user.name + " used the " + (isPm ? "PM " : "") + "command: " + Config.commandCharacter + command +
+			(target ? " " + target : ""));
 
 		let result: GameCommandReturnType = false;
 		try {
@@ -1283,6 +1324,35 @@ export class ScriptedGame extends Game {
 		}
 
 		return result;
+	}
+
+	sendHtmlPage(player: Player, forceSend?: boolean): void {
+		if (this.getHtmlPage) this.getHtmlPage(player).send(false, forceSend);
+	}
+
+	sendChatHtmlPage(player: Player): void {
+		if (this.getHtmlPage) {
+			const htmlPage = this.getHtmlPage(player);
+			if (htmlPage.chatUhtmlName) htmlPage.send();
+		}
+	}
+
+	runHtmlPageCommand(target: string, user: User): void {
+		if (!(user.id in this.players)) return;
+
+		const htmlPage = this.htmlPages.get(this.players[user.id]);
+		if (!htmlPage) return;
+
+		const targets = target.split(',');
+		const targetRoom = Rooms.search(targets[0]);
+		targets.shift();
+
+		if (!targetRoom || targetRoom.id !== this.room.id) return;
+
+		const command = Tools.toId(targets[0]);
+		targets.shift();
+
+		htmlPage.tryCommand(command, targets);
 	}
 
 	addBits(user: User | Player, bits: number, noPm?: boolean, achievementBits?: boolean): boolean {

@@ -1,5 +1,5 @@
 import type { Player } from "../room-activity";
-import { assert, assertStrictEqual } from "../test/test-tools";
+import { addPlayer, assert, assertStrictEqual } from "../test/test-tools";
 import type { GameCommandDefinitions, GameFileTests, IGameAchievement, IGameFile } from "../types/games";
 import type { IActionCardData, ICard, IPokemonCard } from "./templates/card";
 import { CardMatching, game as cardGame } from "./templates/card-matching";
@@ -25,13 +25,13 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.pokemonToActionCard(this);
 			},
-			getRandomTarget(game) {
+			getRandomTarget(game, player, cardsSubset) {
 				const dex = game.getDex();
 				const typeKeys = game.shuffle(dex.getData().typeKeys);
 				let usableType: string | undefined;
 				for (const typeKey of typeKeys) {
 					const typeName = dex.getExistingType(typeKey).name;
-					if (this.isPlayableTarget(game, [typeName])) {
+					if (!this.getTargetErrors(game, [typeName], player, cardsSubset)) {
 						usableType = typeName;
 						break;
 					}
@@ -41,32 +41,26 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 
 				return this.name + ", " + usableType;
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game, targets) {
 				if (targets.length !== 1) {
-					if (player) player.say("You must specify 1 type.");
-					return false;
+					return "You must specify 1 type.";
 				}
 
 				const type = Tools.toId(targets[0]);
 				if (!type) {
-					if (player) player.say("Usage: ``" + Config.commandCharacter + "play " + this.name + ", [type]``");
-					return false;
+					return "Usage: ``" + Config.commandCharacter + "play " + this.name + ", [type]``";
 				}
 
 				if (!(type in game.usableTypes)) {
-					if (player) player.say(CommandParser.getErrorText(['invalidType', targets[0]]));
-					return false;
+					return CommandParser.getErrorText(['invalidType', targets[0]]);
 				}
 
 				if (game.topCard.types.length === 1 && game.usableTypes[type] === game.topCard.types[0]) {
-					if (player) player.say("The top card is already " + game.usableTypes[type] + " type.");
-					return false;
+					return "The top card is already " + game.usableTypes[type] + " type.";
 				}
-
-				return true;
 			},
 		},
 		"kecleon": {
@@ -76,13 +70,13 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.pokemonToActionCard(this);
 			},
-			getRandomTarget(game) {
+			getRandomTarget(game, player, cardsSubset) {
 				const colors = Dex.getData().colors;
 				const colorKeys = game.shuffle(Object.keys(colors));
 				let usableColor: string | undefined;
 				for (const colorKey of colorKeys) {
 					const colorName = colors[colorKey];
-					if (this.isPlayableTarget(game, [colorName])) {
+					if (!this.getTargetErrors(game, [colorName], player, cardsSubset)) {
 						usableColor = colorName;
 						break;
 					}
@@ -91,33 +85,27 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 				if (!usableColor) return;
 				return this.name + ", " + usableColor;
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game, targets) {
 				if (targets.length !== 1) {
-					if (player) player.say("You must specify 1 color.");
-					return false;
+					return "You must specify 1 color.";
 				}
 
 				const color = Tools.toId(targets[0]);
 				if (!color) {
-					if (player) player.say("Usage: ``" + Config.commandCharacter + "play " + this.name + ", [color]``");
-					return false;
+					return "Usage: ``" + Config.commandCharacter + "play " + this.name + ", [color]``";
 				}
 
 				const colors = Dex.getData().colors;
 				if (!(color in colors)) {
-					if (player) player.say("'" + targets[0].trim() + "' is not a valid color.");
-					return false;
+					return "'" + targets[0].trim() + "' is not a valid color.";
 				}
 
 				if (game.topCard.color === colors[color]) {
-					if (player) player.say("The top card is already " + colors[color] + ".");
-					return false;
+					return "The top card is already " + colors[color] + ".";
 				}
-
-				return true;
 			},
 		},
 		"magnemite": {
@@ -127,104 +115,93 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.pokemonToActionCard(this);
 			},
-			getRandomTarget(game, hand) {
-				if (hand.length >= 3) {
-					const cards = game.shuffle(hand);
-					for (const cardA of cards) {
-						for (const cardB of cards) {
+			getRandomTarget(game, player, cardsSubset) {
+				const cards = cardsSubset || game.playerCards.get(player);
+				if (cards && cards.length >= 3) {
+					const shuffledCards = game.shuffle(cards);
+					for (const cardA of shuffledCards) {
+						for (const cardB of shuffledCards) {
 							// @ts-expect-error
 							if (cardA === cardB || cardA === this || cardB === this) continue;
-							if (this.isPlayableTarget(game, [cardA.name, cardB.name], hand)) {
+							if (!this.getTargetErrors(game, [cardA.name, cardB.name], player, cardsSubset)) {
 								return this.name + ", " + cardA.name + ", " + cardB.name;
 							}
 						}
 					}
-				} else {
-					for (const card of hand) {
+				} else if (cards) {
+					for (const card of cards) {
 						// @ts-expect-error
 						if (card === this) continue;
-						if (this.isPlayableTarget(game, [card.name], hand)) {
+						if (!this.getTargetErrors(game, [card.name], player, cardsSubset)) {
 							return this.name + ", " + card.name;
 						}
 					}
 				}
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
-				if (hand!.length >= 3) {
+			getTargetErrors(game, targets, player, cardsSubset) {
+				const cards = cardsSubset || game.playerCards.get(player);
+				if (cards && cards.length >= 3) {
 					if (targets.length != 2) {
-						if (player) player.say("You must specify 2 other Pokemon to pair.");
-						return false;
+						return "You must specify 2 other Pokemon to pair.";
 					}
 
 					const pokemonA = Dex.getPokemon(targets[0]);
 					if (!pokemonA) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[0]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[0]]);
 					}
 
 					const pokemonB = Dex.getPokemon(targets[1]);
 					if (!pokemonB) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[1]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[1]]);
 					}
 
 					const names = [pokemonA.name, pokemonB.name];
-					const indices = game.getCardIndices(names, hand!);
+					const indices = game.getCardIndices(names, cards);
 					for (let i = 0; i < indices.length; i++) {
 						if (indices[i] === -1) {
-							if (player) player.say("You do not have [ " + names[i] + " ].");
-							return false;
+							return "You do not have [ " + names[i] + " ].";
 						}
 					}
 
-					const cardA = hand![indices[0]];
-					const cardB = hand![indices[1]];
+					const cardA = cards[indices[0]];
+					const cardB = cards[indices[1]];
 					if (cardA.action || cardB.action) {
-						if (player) player.say("You cannot pair action cards.");
-						return false;
+						return "You cannot pair action cards.";
 					}
 
 					if (!game.isPokemonCard(cardA) || !game.isPokemonCard(cardB) || !game.isPlayableCard(cardA, cardB)) {
-						if (player) player.say("Please input a valid pair (matching color or type).");
-						return false;
+						return "Please input a valid pair (matching color or type).";
 					}
 
 					const newTopCards = [];
 					if (game.isPlayableCard(cardA, game.topCard)) newTopCards.push(cardA);
 					if (game.isPlayableCard(cardB, game.topCard)) newTopCards.push(cardA);
 					if (!newTopCards.length) {
-						if (player) player.say("You must play a card that matches color or a type with the top card.");
-						return false;
+						return "You must play a card that matches color or a type with the top card.";
 					}
-				} else {
+				} else if (cards) {
 					if (targets.length != 1) {
-						if (player) player.say("You must include your other card.");
-						return false;
+						return "You must include your other card.";
 					}
 
 					const pokemon = Dex.getPokemon(targets[0]);
 					if (!pokemon) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[0]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[0]]);
 					}
 
-					const index = game.getCardIndex(pokemon.name, hand!);
+					const index = game.getCardIndex(pokemon.name, cards);
 					if (index === -1) {
-						if (player) player.say("You do not have [ " + pokemon.name + " ].");
-						return false;
+						return "You do not have [ " + pokemon.name + " ].";
 					}
 
-					const card = hand![index];
+					const card = cards[index];
 					if (!game.isPokemonCard(card) || !game.isPlayableCard(card, game.topCard)) {
-						if (player) player.say(game.playableCardDescription);
-						return false;
+						return game.playableCardDescription;
 					}
 				}
-
-				return true;
 			},
 		},
 		"doduo": {
@@ -237,8 +214,8 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 		"machamp": {
@@ -251,8 +228,8 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 		"inkay": {
@@ -264,8 +241,8 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 		"slaking": {
@@ -278,8 +255,8 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 		"spinda": {
@@ -291,8 +268,8 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 	};
@@ -348,7 +325,7 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 
 	playActionCard(card: IPokemonCard, player: Player, targets: string[], cards: IPokemonCard[]): boolean {
 		if (!card.action) throw new Error("playActionCard called with a regular card");
-		if (!card.action.isPlayableTarget(this, targets, cards, player)) return false;
+		if (card.action.getTargetErrors(this, targets, player, cards)) return false;
 
 		const id = card.id as ActionCardNames;
 		let firstTimeShiny = false;
@@ -448,7 +425,12 @@ class BulbasaursUno extends CardMatching<ActionCardsType> {
 		}
 
 		if (!player.eliminated) {
-			this.sendPlayerCards(player, drawnCards);
+			const htmlPage = this.getHtmlPage(player);
+			htmlPage.renderHandHtml();
+			htmlPage.renderCardActionsHtml();
+			htmlPage.renderPlayedCardsHtml([card]);
+			htmlPage.renderDrawnCardsHtml(drawnCards);
+			htmlPage.send();
 		}
 
 		return true;
@@ -462,7 +444,12 @@ const commands: GameCommandDefinitions<BulbasaursUno> = {
 			this.awaitingCurrentPlayerCard = false;
 			this.currentPlayer = null; // prevent Draw Wizard from activating on a draw
 			const drawnCards = this.drawCard(this.players[user.id]);
-			this.sendPlayerCards(this.players[user.id], drawnCards);
+			const htmlPage = this.getHtmlPage(this.players[user.id]);
+			htmlPage.renderCardActionsHtml();
+			htmlPage.renderDrawnCardsHtml(drawnCards);
+			htmlPage.renderHandHtml();
+			htmlPage.send();
+
 			this.nextRound();
 			return true;
 		},
@@ -476,17 +463,18 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const greninja = game.actionCards.greninja;
 			assert(greninja);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(greninja.getAutoPlayTarget(game, []));
-			assertStrictEqual(greninja.isPlayableTarget(game, ["Grass"]), true);
-			assertStrictEqual(greninja.isPlayableTarget(game, ["Poison"]), true);
-			assertStrictEqual(greninja.isPlayableTarget(game, ["Water", "Fire"]), false);
-			assertStrictEqual(greninja.isPlayableTarget(game, [""]), false);
+			assert(greninja.getAutoPlayTarget(game, player));
+			assertStrictEqual(!greninja.getTargetErrors(game, ["Grass"], player), true);
+			assertStrictEqual(!greninja.getTargetErrors(game, ["Poison"], player), true);
+			assertStrictEqual(!greninja.getTargetErrors(game, ["Water", "Fire"], player), false);
+			assertStrictEqual(!greninja.getTargetErrors(game, [""], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Squirtle"));
-			assert(greninja.getAutoPlayTarget(game, []));
-			assertStrictEqual(game.actionCards.greninja.isPlayableTarget(game, ["Water"]), false);
-			assertStrictEqual(game.actionCards.greninja.isPlayableTarget(game, ["Fire"]), true);
+			assert(greninja.getAutoPlayTarget(game, player));
+			assertStrictEqual(!game.actionCards.greninja.getTargetErrors(game, ["Water"], player), false);
+			assertStrictEqual(!game.actionCards.greninja.getTargetErrors(game, ["Fire"], player), true);
 		},
 	},
 	'action cards - kecleon': {
@@ -494,12 +482,13 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const kecleon = game.actionCards.kecleon;
 			assert(kecleon);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(kecleon.getAutoPlayTarget(game, []));
-			assertStrictEqual(kecleon.isPlayableTarget(game, ["Red"]), true);
-			assertStrictEqual(kecleon.isPlayableTarget(game, ["Green"]), false);
-			assertStrictEqual(kecleon.isPlayableTarget(game, ["Red", "Yellow"]), false);
-			assertStrictEqual(kecleon.isPlayableTarget(game, [""]), false);
+			assert(kecleon.getAutoPlayTarget(game, player));
+			assertStrictEqual(!kecleon.getTargetErrors(game, ["Red"], player), true);
+			assertStrictEqual(!kecleon.getTargetErrors(game, ["Green"], player), false);
+			assertStrictEqual(!kecleon.getTargetErrors(game, ["Red", "Yellow"], player), false);
+			assertStrictEqual(!kecleon.getTargetErrors(game, [""], player), false);
 		},
 	},
 	'action cards - magnemite': {
@@ -507,29 +496,30 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const magnemite = game.actionCards.magnemite;
 			assert(magnemite);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
 			let hand = [game.pokemonToCard(Dex.getExistingPokemon("Magnemite")), game.pokemonToCard(Dex.getExistingPokemon("Ivysaur"))];
-			assert(magnemite.getAutoPlayTarget(game, hand));
-			assertStrictEqual(game.actionCards.magnemite.isPlayableTarget(game, ["Ivysaur"], hand), true);
+			assert(magnemite.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!game.actionCards.magnemite.getTargetErrors(game, ["Ivysaur"], player, hand), true);
 
 			hand = [game.pokemonToCard(Dex.getExistingPokemon("Magnemite")), game.pokemonToCard(Dex.getExistingPokemon("Squirtle"))];
-			assert(!magnemite.getAutoPlayTarget(game, hand));
-			assertStrictEqual(game.actionCards.magnemite.isPlayableTarget(game, ["Squirtle"], hand), false);
+			assert(!magnemite.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!game.actionCards.magnemite.getTargetErrors(game, ["Squirtle"], player, hand), false);
 
 			hand = [game.pokemonToCard(Dex.getExistingPokemon("Magnemite")), game.pokemonToCard(Dex.getExistingPokemon("Ivysaur")),
 				game.pokemonToCard(Dex.getExistingPokemon("Venusaur"))];
-			assert(magnemite.getAutoPlayTarget(game, hand));
-			assertStrictEqual(game.actionCards.magnemite.isPlayableTarget(game, ["Ivysaur", "Venusaur"], hand), true);
+			assert(magnemite.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!game.actionCards.magnemite.getTargetErrors(game, ["Ivysaur", "Venusaur"], player, hand), true);
 
 			hand = [game.pokemonToCard(Dex.getExistingPokemon("Magnemite")), game.pokemonToCard(Dex.getExistingPokemon("Squirtle")),
 				game.pokemonToCard(Dex.getExistingPokemon("Charmander"))];
-			assert(!magnemite.getAutoPlayTarget(game, hand));
-			assertStrictEqual(game.actionCards.magnemite.isPlayableTarget(game, ["Ivysaur", "Venusaur"], hand), false);
+			assert(!magnemite.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!game.actionCards.magnemite.getTargetErrors(game, ["Ivysaur", "Venusaur"], player, hand), false);
 
 			hand = [game.pokemonToCard(Dex.getExistingPokemon("Magnemite")), game.pokemonToCard(Dex.getExistingPokemon("Ivysaur")),
 				game.pokemonToCard(Dex.getExistingPokemon("Squirtle"))];
-			assert(!magnemite.getAutoPlayTarget(game, hand));
-			assertStrictEqual(game.actionCards.magnemite.isPlayableTarget(game, ["Ivysaur", "Squirtle"], hand), false);
+			assert(!magnemite.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!game.actionCards.magnemite.getTargetErrors(game, ["Ivysaur", "Squirtle"], player, hand), false);
 		},
 	},
 	'action cards - doduo': {
@@ -537,9 +527,10 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const doduo = game.actionCards.doduo;
 			assert(doduo);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(doduo.getAutoPlayTarget(game, []));
-			assertStrictEqual(doduo.isPlayableTarget(game, []), true);
+			assert(doduo.getAutoPlayTarget(game, player));
+			assertStrictEqual(!doduo.getTargetErrors(game, [], player), true);
 		},
 	},
 	'action cards - machamp': {
@@ -547,9 +538,10 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const machamp = game.actionCards.machamp;
 			assert(machamp);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(machamp.getAutoPlayTarget(game, []));
-			assertStrictEqual(machamp.isPlayableTarget(game, []), true);
+			assert(machamp.getAutoPlayTarget(game, player));
+			assertStrictEqual(!machamp.getTargetErrors(game, [], player), true);
 		},
 	},
 	'action cards - inkay': {
@@ -557,9 +549,10 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const inkay = game.actionCards.inkay;
 			assert(inkay);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(inkay.getAutoPlayTarget(game, []));
-			assertStrictEqual(inkay.isPlayableTarget(game, []), true);
+			assert(inkay.getAutoPlayTarget(game, player));
+			assertStrictEqual(!inkay.getTargetErrors(game, [], player), true);
 		},
 	},
 	'action cards - slaking': {
@@ -567,9 +560,10 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const slaking = game.actionCards.slaking;
 			assert(slaking);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(slaking.getAutoPlayTarget(game, []));
-			assertStrictEqual(slaking.isPlayableTarget(game, []), true);
+			assert(slaking.getAutoPlayTarget(game, player));
+			assertStrictEqual(!slaking.getTargetErrors(game, [], player), true);
 		},
 	},
 	'action cards - spinda': {
@@ -577,9 +571,10 @@ const tests: GameFileTests<BulbasaursUno> = {
 			const spinda = game.actionCards.spinda;
 			assert(spinda);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(spinda.getAutoPlayTarget(game, []));
-			assertStrictEqual(spinda.isPlayableTarget(game, []), true);
+			assert(spinda.getAutoPlayTarget(game, player));
+			assertStrictEqual(!spinda.getTargetErrors(game, [], player), true);
 		},
 	},
 };
@@ -648,6 +643,12 @@ export const game: IGameFile<BulbasaursUno> = Games.copyTemplateProperties(cardG
 			name: "Bulbasaur's Galar Uno",
 			variantAliases: ["galar", "gen8"],
 			requiredGen: 8,
+			maxPlayers: 18,
+		},
+		{
+			name: "Bulbasaur's Paldea Uno",
+			variantAliases: ["paldea", "gen9"],
+			requiredGen: 9,
 			maxPlayers: 18,
 		},
 	],

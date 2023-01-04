@@ -1,3 +1,4 @@
+import type { ActivityPageBase } from "./html-pages/activity-pages/activity-page-base";
 import type { PRNGSeed } from "./lib/prng";
 import { PRNG } from "./lib/prng";
 import type { Room } from "./rooms";
@@ -16,7 +17,7 @@ export class Player {
 	metWinCondition: boolean | undefined;
 	round: number | undefined;
 	sentAssistActions: boolean | undefined;
-	sentHtmlPage: boolean | undefined;
+	sentHtmlPage: string | undefined;
 	sentPrivateHtml: boolean | undefined;
 	team: PlayerTeam | undefined;
 
@@ -89,22 +90,23 @@ export class Player {
 	}
 
 	sendHtmlPage(html: string, pageId?: string, additionalAttributes?: IOutgoingMessageAttributes): void {
-		if (!this.sentHtmlPage) this.sentHtmlPage = true;
-		this.activity.getPmRoom().sendHtmlPage(this, pageId || this.activity.baseHtmlPageId, this.activity.getHtmlPageWithHeader(html),
+		if (!pageId) pageId = this.activity.baseHtmlPageId;
+		if (!this.sentHtmlPage) this.sentHtmlPage = pageId;
+
+		this.activity.getPmRoom().sendHtmlPage(this, pageId, this.activity.getHtmlPageWithHeader(html),
 			additionalAttributes);
 	}
 
-	closeHtmlPage(pageId?: string, additionalAttributes?: IOutgoingMessageAttributes): void {
+	closeHtmlPage(additionalAttributes?: IOutgoingMessageAttributes): void {
 		if (!this.sentHtmlPage) return;
 
-		this.activity.getPmRoom().closeHtmlPage(this, pageId || this.activity.baseHtmlPageId, additionalAttributes);
+		this.activity.getPmRoom().closeHtmlPage(this, this.sentHtmlPage, additionalAttributes);
 	}
 
 	sendHighlight(notificationTitle: string, highlightPhrase?: string, pageId?: string,
 		additionalAttributes?: IOutgoingMessageAttributes): void {
 		if (this.sentHtmlPage) {
-			this.activity.getPmRoom().sendHighlightPage(this, pageId || this.activity.baseHtmlPageId, notificationTitle, highlightPhrase,
-				additionalAttributes);
+			this.activity.getPmRoom().sendHighlightPage(this, this.sentHtmlPage, notificationTitle, highlightPhrase, additionalAttributes);
 		} else {
 			this.sendRoomHighlight(notificationTitle, highlightPhrase, additionalAttributes);
 		}
@@ -194,6 +196,7 @@ export abstract class Activity {
 	ended: boolean = false;
 	htmlMessageListeners: IActivityHtmlListener[] = [];
 	htmlPageHeader: string = '';
+	htmlPages = new Map<Player, ActivityPageBase>();
 	messageListeners: string[] = [];
 	pastPlayers: Dict<Player> = {};
 	playerCount: number = 0;
@@ -234,6 +237,16 @@ export abstract class Activity {
 
 	getPmRoom(): Room {
 		return this.subRoom || this.pmRoom;
+	}
+
+	setTimeout(callback: () => void, time: number): void {
+		if (this.timeout) clearTimeout(this.timeout);
+
+		this.timeout = setTimeout(() => {
+			if (this.ended) return;
+
+			callback();
+		}, time);
 	}
 
 	destroyPlayers(): void {
@@ -343,6 +356,10 @@ export abstract class Activity {
 		const player = this.players[oldId] || this.pastPlayers[oldId]; // eslint-disable-line @typescript-eslint/no-unnecessary-condition
 		// @ts-expect-error
 		player.name = name;
+
+		const htmlPage = this.htmlPages.get(player);
+		if (htmlPage) htmlPage.onRenameUser(player, oldId);
+
 		if (player.id === id) return;
 		// @ts-expect-error
 		player.id = id;
@@ -457,14 +474,20 @@ export abstract class Activity {
 		if (this.ended) return;
 
 		this.messageListeners.push(message);
-		this.room.on(message, listener);
+		this.room.on(message, (timestamp: number) => {
+			if (this.ended) return;
+			listener(timestamp);
+		});
 	}
 
 	onHtml(html: string, listener: MessageListener, serverHtml?: boolean): void {
 		if (this.ended) return;
 
 		this.htmlMessageListeners.push({html, serverHtml});
-		this.room.onHtml(html, listener, serverHtml);
+		this.room.onHtml(html, (timestamp: number) => {
+			if (this.ended) return;
+			listener(timestamp);
+		}, serverHtml);
 	}
 
 	onUhtml(name: string, html: string, listener: MessageListener): void {
@@ -474,7 +497,10 @@ export abstract class Activity {
 		if (!(id in this.uhtmlMessageListeners)) this.uhtmlMessageListeners[id] = [];
 		this.uhtmlMessageListeners[id].push({name, html});
 
-		this.room.onUhtml(name, html, listener);
+		this.room.onUhtml(name, html, (timestamp: number) => {
+			if (this.ended) return;
+			listener(timestamp);
+		});
 	}
 
 	off(message: string): void {
@@ -606,6 +632,7 @@ export abstract class Activity {
 		return this.getPlayerAttributes(player => player.name, players);
 	}
 
+	getHtmlPage?(player: Player): ActivityPageBase;
 	onCreatePlayer?(player: Player, isPastPlayer: boolean): void;
 	onEnd?(): void;
 	onForceEnd?(user?: User, reason?: string): void;

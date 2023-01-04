@@ -1,5 +1,4 @@
-import type { Room } from "../../rooms";
-import type { IQuietPMButtonOptions } from "../html-page-base";
+import type { HtmlPageBase, IQuietPMButtonOptions } from "../html-page-base";
 
 export interface IComponentProps {
 	readonly?: boolean;
@@ -10,18 +9,18 @@ export abstract class ComponentBase<PropsType extends IComponentProps = ICompone
 	abstract componentId: string;
 
 	active: boolean = true;
-	closed: boolean = false;
+	destroyed: boolean = false;
 	components: ComponentBase[] = [];
 	timeout: NodeJS.Timer | null = null;
 
-	room: Room;
+	htmlPage: HtmlPageBase;
 	commandPrefix: string;
 	parentCommandPrefix: string;
 	componentCommand: string;
 	props: PropsType;
 
-	constructor(room: Room, parentCommandPrefix: string, componentCommand: string, props: PropsType) {
-		this.room = room;
+	constructor(htmlPage: HtmlPageBase, parentCommandPrefix: string, componentCommand: string, props: PropsType) {
+		this.htmlPage = htmlPage;
 		this.parentCommandPrefix = parentCommandPrefix;
 		this.componentCommand = componentCommand;
 		this.commandPrefix = parentCommandPrefix + ", " + componentCommand;
@@ -34,11 +33,15 @@ export abstract class ComponentBase<PropsType extends IComponentProps = ICompone
 	destroy(): void {
 		if (this.timeout) clearTimeout(this.timeout);
 
-		this.closed = true;
-		Tools.unrefProperties(this, ['closed']);
+		this.destroyed = true;
+
+		Tools.unrefProperties(this.props);
+		Tools.unrefProperties(this, ['destroyed']);
 	}
 
 	checkComponentCommands(componentCommand: string, targets: readonly string[]): string | undefined {
+		if (this.destroyed) return;
+
 		for (const component of this.components) {
 			if (component.active && component.componentCommand === componentCommand) {
 				return component.tryCommand(targets);
@@ -49,7 +52,8 @@ export abstract class ComponentBase<PropsType extends IComponentProps = ICompone
 	}
 
 	getQuietPmButton(message: string, label: string, options?: IQuietPMButtonOptions): string {
-		let disabled = options && (options.disabled || options.selectedAndDisabled);
+		let disabled = this.htmlPage.closingSnapshot || this.htmlPage.staffUserView ||
+			(options && (options.disabled || options.selectedAndDisabled));
 		if (!disabled && options && !options.enabledReadonly && this.props.readonly) disabled = true;
 
 		let style = options && options.style ? options.style : "";
@@ -58,6 +62,6 @@ export abstract class ComponentBase<PropsType extends IComponentProps = ICompone
 			style += 'border-color: #ffffff;';
 		}
 
-		return Client.getQuietPmButton(this.room, message, label, disabled, style);
+		return Client.getQuietPmButton(this.htmlPage.getPmRoom(), message, label, disabled, style);
 	}
 }

@@ -1,5 +1,5 @@
 import type { Player } from "../room-activity";
-import { assert, assertStrictEqual } from "../test/test-tools";
+import { addPlayer, assert, assertStrictEqual } from "../test/test-tools";
 import type { GameCommandDefinitions, GameFileTests, IGameAchievement, IGameFile } from "../types/games";
 import type { IPokemon } from "../types/pokemon-showdown";
 import type { IActionCardData, IPokemonCard } from "./templates/card";
@@ -26,20 +26,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Water 1')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Water 1 group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Water 1 group!";
 				}
-
-				return true;
 			},
 		},
 		"seaincense": {
@@ -48,20 +43,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Fairy')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Fairy group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Fairy group!";
 				}
-
-				return true;
 			},
 		},
 		"roseincense": {
@@ -70,20 +60,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Grass')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Grass group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Grass group!";
 				}
-
-				return true;
 			},
 		},
 		"rockincense": {
@@ -92,20 +77,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Mineral')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Mineral group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Mineral group!";
 				}
-
-				return true;
 			},
 		},
 		"oddincense": {
@@ -114,20 +94,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Human-Like')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Human-Like group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Human-Like group!";
 				}
-
-				return true;
 			},
 		},
 		"laxincense": {
@@ -136,20 +111,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Amorphous')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Amorphous group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Amorphous group!";
 				}
-
-				return true;
 			},
 		},
 		"fullincense": {
@@ -158,20 +128,15 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getAutoPlayTarget(game) {
-				if (this.isPlayableTarget(game, [])) {
+			getAutoPlayTarget(game, player, cardsSubset) {
+				if (!this.getTargetErrors(game, [], player, cardsSubset)) {
 					return this.name;
 				}
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game) {
 				if (game.topCard.eggGroups.includes('Monster')) {
-					if (player) {
-						player.say(game.topCard.name + " is already in the Monster group!");
-					}
-					return false;
+					return game.topCard.name + " is already in the Monster group!";
 				}
-
-				return true;
 			},
 		},
 		"happiny": {
@@ -181,11 +146,11 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.pokemonToActionCard(this);
 			},
-			getRandomTarget(game) {
+			getRandomTarget(game, player, cardsSubset) {
 				const shuffledEggGroups = game.shuffle(eggGroupKeys);
 				let usableEggGroup: string | undefined;
 				for (const eggGroup of shuffledEggGroups) {
-					if (this.isPlayableTarget(game, [eggGroup])) {
+					if (!this.getTargetErrors(game, [eggGroup], player, cardsSubset)) {
 						usableEggGroup = eggGroup;
 						break;
 					}
@@ -194,32 +159,26 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 				if (!usableEggGroup) return;
 				return this.name + ", " + usableEggGroup;
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game, targets) {
 				if (targets.length !== 1) {
-					if (player) player.say("You must specify 1 egg group.");
-					return false;
+					return "You must specify 1 egg group.";
 				}
 
 				const eggGroup = Tools.toId(targets[0]);
 				if (!eggGroup) {
-					if (player) player.say("Usage: ``" + Config.commandCharacter + "play " + this.name + ", [egg group]``");
-					return false;
+					return "Usage: ``" + Config.commandCharacter + "play " + this.name + ", [egg group]``";
 				}
 
 				if (!(eggGroup in eggGroups)) {
-					if (player) player.say(CommandParser.getErrorText(['invalidEggGroup', targets[0]]));
-					return false;
+					return CommandParser.getErrorText(['invalidEggGroup', targets[0]]);
 				}
 
 				if (game.topCard.eggGroups.length === 1 && eggGroups[eggGroup] === game.topCard.eggGroups[0]) {
-					if (player) player.say("The top card is already in the " + eggGroups[eggGroup] + " egg group.");
-					return false;
+					return "The top card is already in the " + eggGroups[eggGroup] + " egg group.";
 				}
-
-				return true;
 			},
 		},
 		"chansey": {
@@ -229,7 +188,7 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.pokemonToActionCard(this);
 			},
-			getRandomTarget(game) {
+			getRandomTarget(game, player, cardsSubset) {
 				const shuffledEggGroups = game.shuffle(eggGroupKeys);
 				let usableEggGroups: string | undefined;
 				for (let i = 0; i < shuffledEggGroups.length; i++) {
@@ -237,7 +196,7 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 					for (let j = 0; j < shuffledEggGroups.length; j++) {
 						if (j === i) continue;
 						const eggGroupB = shuffledEggGroups[j];
-						if (this.isPlayableTarget(game, [eggGroupA, eggGroupB])) {
+						if (!this.getTargetErrors(game, [eggGroupA, eggGroupB], player, cardsSubset)) {
 							usableEggGroups = eggGroupA + ", " + eggGroupB;
 							break;
 						}
@@ -250,47 +209,38 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 
 				return this.name + ", " + usableEggGroups;
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
+			getTargetErrors(game, targets) {
 				if (targets.length !== 2) {
-					if (player) player.say("You must specify 2 egg groups.");
-					return false;
+					return "You must specify 2 egg groups.";
 				}
 
 				const eggGroup1 = Tools.toId(targets[0]);
 				const eggGroup2 = Tools.toId(targets[1]);
 				if (!eggGroup1 || !eggGroup2) {
-					if (player) player.say("Usage: ``" + Config.commandCharacter + "play " + this.name + ", [egg group 1], " +
-						"[egg group 2]``");
-					return false;
+					return "Usage: ``" + Config.commandCharacter + "play " + this.name + ", [egg group 1], [egg group 2]``";
 				}
 
 				if (!(eggGroup1 in eggGroups)) {
-					if (player) player.say(CommandParser.getErrorText(['invalidEggGroup', targets[0]]));
-					return false;
+					return CommandParser.getErrorText(['invalidEggGroup', targets[0]]);
 				}
 
 				if (!(eggGroup2 in eggGroups)) {
-					if (player) player.say(CommandParser.getErrorText(['invalidEggGroup', targets[1]]));
-					return false;
+					return CommandParser.getErrorText(['invalidEggGroup', targets[1]]);
 				}
 
 				if (eggGroup1 === eggGroup2) {
-					if (player) player.say("Please enter two unique egg groups.");
-					return false;
+					return "Please enter two unique egg groups.";
 				}
 
 				if (game.topCard.eggGroups.length === 2) {
 					const eggGroupsList = [eggGroups[eggGroup1], eggGroups[eggGroup2]];
 					if (game.topCard.eggGroups.slice().sort().join(",") === eggGroupsList.sort().join(",")) {
-						if (player) player.say("The top card is already in the " + eggGroupsList.join(" and ") + " egg groups.");
-						return false;
+						return "The top card is already in the " + eggGroupsList.join(" and ") + " egg groups.";
 					}
 				}
-
-				return true;
 			},
 		},
 		"ditto": {
@@ -302,8 +252,8 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getAutoPlayTarget() {
 				return this.name;
 			},
-			isPlayableTarget() {
-				return true;
+			getTargetErrors() {
+				return "";
 			},
 		},
 		"destinyknot": {
@@ -313,64 +263,63 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 			getCard(game) {
 				return game.itemToActionCard(this);
 			},
-			getRandomTarget(game, hand) {
-				if (hand.length >= 3) {
-					const cards = game.shuffle(hand);
-					for (const cardA of cards) {
-						for (const cardB of cards) {
+			getRandomTarget(game, player, cardsSubset) {
+				const cards = cardsSubset || game.playerCards.get(player);
+				if (!cards) return;
+
+				if (cards.length >= 3) {
+					const shuffledCards = game.shuffle(cards);
+					for (const cardA of shuffledCards) {
+						for (const cardB of shuffledCards) {
 							// @ts-expect-error
 							if (cardA === cardB || cardA === this || cardB === this) continue;
-							if (this.isPlayableTarget(game, [cardA.name, cardB.name], hand)) {
+							if (!this.getTargetErrors(game, [cardA.name, cardB.name], player, cardsSubset)) {
 								return this.name + ", " + cardA.name + ", " + cardB.name;
 							}
 						}
 					}
 				} else {
-					for (const card of hand) {
+					for (const card of cards) {
 						// @ts-expect-error
 						if (card === this) continue;
-						if (this.isPlayableTarget(game, [card.name], hand)) {
+						if (!this.getTargetErrors(game, [card.name], player, cardsSubset)) {
 							return this.name + ", " + card.name;
 						}
 					}
 				}
 			},
-			getAutoPlayTarget(game, hand) {
-				return this.getRandomTarget!(game, hand);
+			getAutoPlayTarget(game, player, cardsSubset) {
+				return this.getRandomTarget!(game, player, cardsSubset);
 			},
-			isPlayableTarget(game, targets, hand, player) {
-				if (hand!.length >= 3) {
+			getTargetErrors(game, targets, player, cardsSubset) {
+				const cards = cardsSubset || game.playerCards.get(player);
+				if (cards && cards.length >= 3) {
 					if (targets.length !== 2) {
-						if (player) player.say("You must specify 2 Pokemon.");
-						return false;
+						return "You must specify 2 Pokemon.";
 					}
 
 					const pokemonA = Dex.getPokemon(targets[0]);
 					if (!pokemonA) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[0]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[0]]);
 					}
 
 					const pokemonB = Dex.getPokemon(targets[1]);
 					if (!pokemonB) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[1]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[1]]);
 					}
 
 					const names = [pokemonA.name, pokemonB.name];
-					const indices = game.getCardIndices(names, hand!);
+					const indices = game.getCardIndices(names, cards);
 					for (let i = 0; i < indices.length; i++) {
 						if (indices[i] === -1) {
-							if (player) player.say("You do not have [ " + names[i] + " ].");
-							return false;
+							return "You do not have [ " + names[i] + " ].";
 						}
 					}
 
-					const cardA = hand![indices[0]];
-					const cardB = hand![indices[1]];
+					const cardA = cards[indices[0]];
+					const cardB = cards[indices[1]];
 					if (cardA.action || cardB.action) {
-						if (player) player.say("You cannot breed action cards.");
-						return false;
+						return "You cannot breed action cards.";
 					}
 
 					let matchingEggGroup = false;
@@ -385,35 +334,28 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 					}
 
 					if (!matchingEggGroup) {
-						if (player) player.say("You must play 2 cards that share an egg group.");
-						return false;
+						return "You must play 2 cards that share an egg group.";
 					}
-				} else {
+				} else if (cards) {
 					if (targets.length != 1) {
-						if (player) player.say("You must include your other card.");
-						return false;
+						return "You must include your other card.";
 					}
 
 					const pokemon = Dex.getPokemon(targets[0]);
 					if (!pokemon) {
-						if (player) player.say(CommandParser.getErrorText(['invalidPokemon', targets[0]]));
-						return false;
+						return CommandParser.getErrorText(['invalidPokemon', targets[0]]);
 					}
 
-					const index = game.getCardIndex(pokemon.name, hand!);
+					const index = game.getCardIndex(pokemon.name, cards);
 					if (index === -1) {
-						if (player) player.say("You do not have [ " + pokemon.name + " ].");
-						return false;
+						return "You do not have [ " + pokemon.name + " ].";
 					}
 
-					const card = hand![index];
+					const card = cards[index];
 					if (!game.isPokemonCard(card)) {
-						if (player) player.say(game.playableCardDescription);
-						return false;
+						return game.playableCardDescription;
 					}
 				}
-
-				return true;
 			},
 		},
 	};
@@ -428,6 +370,8 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 	playableCardsDescription: string = "Your first played card must share an egg group with the top card.";
 	playerCards = new Map<Player, IPokemonCard[]>();
 	shinyCardAchievement = BlisseysEggCards.achievements.luckofthedraw;
+	usesEggGroups = true;
+	usesTypings = false;
 
 	static loadData(): void {
 		const eggGroupsData = Dex.getData().eggGroups;
@@ -483,10 +427,6 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 		return this.getEggGroupLabel(card);
 	}
 
-	getCardPrivateDetails(card: IPokemonCard): string {
-		return "<b>Egg grouping</b>:&nbsp;" + this.getEggGroupLabel(card);
-	}
-
 	isCardPair(card: IPokemonCard, otherCard: IPokemonCard): boolean {
 		if ((card !== this.topCard && card.action) || (otherCard !== this.topCard && otherCard.action)) {
 			return false;
@@ -516,7 +456,7 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 
 	playActionCard(card: IPokemonCard, player: Player, targets: string[], cards: IPokemonCard[]): boolean {
 		if (!card.action) throw new Error("playActionCard called with a regular card");
-		if (!card.action.isPlayableTarget(this, targets, cards, player)) return false;
+		if (card.action.getTargetErrors(this, targets, player, cards)) return false;
 
 		const id = card.id as ActionCardNames;
 		let cardDetail: string | undefined;
@@ -585,7 +525,11 @@ class BlisseysEggCards extends CardMatching<ActionCardsType> {
 		this.currentPlayer = null;
 
 		if (!player.eliminated) {
-			this.sendPlayerCards(player);
+			const htmlPage = this.getHtmlPage(player);
+			htmlPage.renderHandHtml();
+			htmlPage.renderCardActionsHtml();
+			htmlPage.renderPlayedCardsHtml([card]);
+			htmlPage.send();
 		}
 
 		return true;
@@ -599,7 +543,12 @@ const commands: GameCommandDefinitions<BlisseysEggCards> = {
 			this.awaitingCurrentPlayerCard = false;
 			this.currentPlayer = null;
 			const drawnCards = this.drawCard(this.players[user.id]);
-			this.sendPlayerCards(this.players[user.id], drawnCards);
+			const htmlPage = this.getHtmlPage(this.players[user.id]);
+			htmlPage.renderCardActionsHtml();
+			htmlPage.renderDrawnCardsHtml(drawnCards);
+			htmlPage.renderHandHtml();
+			htmlPage.send();
+
 			this.nextRound();
 			return true;
 		},
@@ -613,17 +562,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const waveincense = game.actionCards.waveincense;
 			assert(waveincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(waveincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(waveincense.isPlayableTarget(game, []), true);
+			assert(waveincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!waveincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Blastoise"));
-			assert(!waveincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(waveincense.isPlayableTarget(game, []), false);
+			assert(!waveincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!waveincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Tympole"));
-			assert(!waveincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(waveincense.isPlayableTarget(game, []), false);
+			assert(!waveincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!waveincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - seaincense': {
@@ -631,17 +581,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const seaincense = game.actionCards.seaincense;
 			assert(seaincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(seaincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(seaincense.isPlayableTarget(game, []), true);
+			assert(seaincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!seaincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Cherrim"));
-			assert(!seaincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(seaincense.isPlayableTarget(game, []), false);
+			assert(!seaincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!seaincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Chansey"));
-			assert(!seaincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(seaincense.isPlayableTarget(game, []), false);
+			assert(!seaincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!seaincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - roseincense': {
@@ -649,17 +600,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const roseincense = game.actionCards.roseincense;
 			assert(roseincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(roseincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(roseincense.isPlayableTarget(game, []), true);
+			assert(roseincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!roseincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Abomasnow"));
-			assert(!roseincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(roseincense.isPlayableTarget(game, []), false);
+			assert(!roseincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!roseincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Amoonguss"));
-			assert(!roseincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(roseincense.isPlayableTarget(game, []), false);
+			assert(!roseincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!roseincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - rockincense': {
@@ -667,17 +619,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const rockincense = game.actionCards.rockincense;
 			assert(rockincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(rockincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(rockincense.isPlayableTarget(game, []), true);
+			assert(rockincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!rockincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Cufant"));
-			assert(!rockincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(rockincense.isPlayableTarget(game, []), false);
+			assert(!rockincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!rockincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Baltoy"));
-			assert(!rockincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(rockincense.isPlayableTarget(game, []), false);
+			assert(!rockincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!rockincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - oddincense': {
@@ -685,17 +638,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const oddincense = game.actionCards.oddincense;
 			assert(oddincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(oddincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(oddincense.isPlayableTarget(game, []), true);
+			assert(oddincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!oddincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Buneary"));
-			assert(!oddincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(oddincense.isPlayableTarget(game, []), false);
+			assert(!oddincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!oddincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Abra"));
-			assert(!oddincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(oddincense.isPlayableTarget(game, []), false);
+			assert(!oddincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!oddincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - laxincense': {
@@ -703,17 +657,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const laxincense = game.actionCards.laxincense;
 			assert(laxincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(laxincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(laxincense.isPlayableTarget(game, []), true);
+			assert(laxincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!laxincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Dragapult"));
-			assert(!laxincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(laxincense.isPlayableTarget(game, []), false);
+			assert(!laxincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!laxincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Drifloon"));
-			assert(!laxincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(laxincense.isPlayableTarget(game, []), false);
+			assert(!laxincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!laxincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - fullincense': {
@@ -721,17 +676,18 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const fullincense = game.actionCards.fullincense;
 			assert(fullincense);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(fullincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(fullincense.isPlayableTarget(game, []), true);
+			assert(fullincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!fullincense.getTargetErrors(game, [], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Squirtle"));
-			assert(!fullincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(fullincense.isPlayableTarget(game, []), false);
+			assert(!fullincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!fullincense.getTargetErrors(game, [], player), false);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Aron"));
-			assert(!fullincense.getAutoPlayTarget(game, []));
-			assertStrictEqual(fullincense.isPlayableTarget(game, []), false);
+			assert(!fullincense.getAutoPlayTarget(game, player));
+			assertStrictEqual(!fullincense.getTargetErrors(game, [], player), false);
 		},
 	},
 	'action cards - happiny': {
@@ -739,18 +695,19 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const happiny = game.actionCards.happiny;
 			assert(happiny);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(happiny.getAutoPlayTarget(game, []));
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Monster"]), true);
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Grass"]), true);
+			assert(happiny.getAutoPlayTarget(game, player));
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Monster"], player), true);
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Grass"], player), true);
 
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Rattata"));
-			assert(happiny.getAutoPlayTarget(game, []));
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Monster"]), true);
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Field"]), false);
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Undiscovered"]), false);
-			assertStrictEqual(happiny.isPlayableTarget(game, [""]), false);
-			assertStrictEqual(happiny.isPlayableTarget(game, ["Monster", "Grass"]), false);
+			assert(happiny.getAutoPlayTarget(game, player));
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Monster"], player), true);
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Field"], player), false);
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Undiscovered"], player), false);
+			assertStrictEqual(!happiny.getTargetErrors(game, [""], player), false);
+			assertStrictEqual(!happiny.getTargetErrors(game, ["Monster", "Grass"], player), false);
 		},
 	},
 	'action cards - magmar': {
@@ -758,15 +715,16 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const chansey = game.actionCards.chansey;
 			assert(chansey);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Bulbasaur"));
-			assert(chansey.getAutoPlayTarget(game, []));
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Field", "Fairy"]), true);
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Monster", "Grass"]), false);
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Grass", "Monster"]), false);
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Field"]), false);
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Undiscovered", "Fairy"]), false);
-			assertStrictEqual(chansey.isPlayableTarget(game, ["Fairy", "Undiscovered"]), false);
-			assertStrictEqual(chansey.isPlayableTarget(game, [""]), false);
+			assert(chansey.getAutoPlayTarget(game, player));
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Field", "Fairy"], player), true);
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Monster", "Grass"], player), false);
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Grass", "Monster"], player), false);
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Field"], player), false);
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Undiscovered", "Fairy"], player), false);
+			assertStrictEqual(!chansey.getTargetErrors(game, ["Fairy", "Undiscovered"], player), false);
+			assertStrictEqual(!chansey.getTargetErrors(game, [""], player), false);
 		},
 	},
 	'action cards - destinyknot': {
@@ -774,20 +732,21 @@ const tests: GameFileTests<BlisseysEggCards> = {
 			const destinyknot = game.actionCards.destinyknot;
 			assert(destinyknot);
 
+			const player = addPlayer(game, "Player 1");
 			game.topCard = game.pokemonToCard(Dex.getExistingPokemon("Blissey"));
 			let hand = [game.pokemonToCard(Dex.getExistingPokemon("Abomasnow")), game.pokemonToCard(Dex.getExistingPokemon("Aggron")),
 				game.pokemonToCard(Dex.getExistingPokemon("Tangela"))];
-			assert(destinyknot.getAutoPlayTarget(game, hand));
-			assertStrictEqual(destinyknot.isPlayableTarget(game, ["Abomasnow", "Aggron"], hand), true);
-			assertStrictEqual(destinyknot.isPlayableTarget(game, ["Aggron", "Tangela"], hand), false);
-			assertStrictEqual(destinyknot.isPlayableTarget(game, ["Abomasnow"], hand), false);
-			assertStrictEqual(destinyknot.isPlayableTarget(game, [""], hand), false);
+			assert(destinyknot.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!destinyknot.getTargetErrors(game, ["Abomasnow", "Aggron"], player, hand), true);
+			assertStrictEqual(!destinyknot.getTargetErrors(game, ["Aggron", "Tangela"], player, hand), false);
+			assertStrictEqual(!destinyknot.getTargetErrors(game, ["Abomasnow"], player, hand), false);
+			assertStrictEqual(!destinyknot.getTargetErrors(game, [""], player, hand), false);
 
 			hand = [game.pokemonToCard(Dex.getExistingPokemon("Abomasnow"))];
-			assert(destinyknot.getAutoPlayTarget(game, hand));
-			assertStrictEqual(destinyknot.isPlayableTarget(game, ["Abomasnow"], hand), true);
-			assertStrictEqual(destinyknot.isPlayableTarget(game, ["Aggron"], hand), false);
-			assertStrictEqual(destinyknot.isPlayableTarget(game, [""], hand), false);
+			assert(destinyknot.getAutoPlayTarget(game, player, hand));
+			assertStrictEqual(!destinyknot.getTargetErrors(game, ["Abomasnow"], player, hand), true);
+			assertStrictEqual(!destinyknot.getTargetErrors(game, ["Aggron"], player, hand), false);
+			assertStrictEqual(!destinyknot.getTargetErrors(game, [""], player, hand), false);
 		},
 	},
 };

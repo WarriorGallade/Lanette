@@ -10,7 +10,7 @@ import type { IHostDisplayProps } from "./components/host-display-base";
 import type { IPokemonPick } from "./components/pokemon-picker-base";
 import { RandomHostDisplay } from "./components/random-host-display";
 import type { ITrainerPick } from "./components/trainer-picker";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 import { MultiTextInput } from "./components/multi-text-input";
 import { TextInput } from "./components/text-input";
 import { NumberTextInput } from "./components/number-text-input";
@@ -42,20 +42,19 @@ const autoSendNo = 'no';
 
 const refreshCommand = 'refresh';
 const autoRefreshCommand = 'autorefresh';
-const closeCommand = 'close';
 
 const maxGifs = 6;
 const maxIcons = 15;
 const maxTrainers = 6;
 
-const pageId = 'game-host-control-panel';
-
-export const id = pageId;
+export const pageId = 'game-host-control-panel';
 export const pages: Dict<GameHostControlPanel> = {};
 
 export class GameHostControlPanel extends HtmlPageBase {
 	static compatibleHintGames: string[] = [];
 	static GameHostControlPanelLoaded: boolean = false;
+	static baseCommand: string = baseCommand;
+	static autoRefreshCommand: string = autoRefreshCommand;
 
 	pageId = pageId;
 
@@ -66,6 +65,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 	currentPlayer: string = '';
 	generateHintsGameHtml: string = '';
 	generatedAnswer: IRandomGameAnswer | undefined = undefined;
+	generatedAnswerErrorHtml: string = '';
 	pokemonGeneration: ModelGeneration = 'xy';
 	storedMessageInput: MultiTextInput;
 	twistInput: TextInput;
@@ -80,6 +80,8 @@ export class GameHostControlPanel extends HtmlPageBase {
 
 		GameHostControlPanel.loadData();
 
+		this.setCloseButton();
+
 		const database = Storage.getDatabase(this.room);
 		let hostDisplay: IGameHostDisplay | undefined;
 
@@ -90,7 +92,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 		this.currentView = room.userHostedGame && room.userHostedGame.isHost(user) ? 'hostinformation' : 'manualhostdisplay';
 		const hostInformation = this.currentView === 'hostinformation';
 
-		this.addPointsInput = new NumberTextInput(room, this.commandPrefix, addPointsCommand, {
+		this.addPointsInput = new NumberTextInput(this, this.commandPrefix, addPointsCommand, {
 			min: 1,
 			label: "Add point(s)",
 			submitText: "Add",
@@ -101,7 +103,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 		});
 		this.addPointsInput.active = hostInformation;
 
-		this.removePointsInput = new NumberTextInput(room, this.commandPrefix, removePointsCommand, {
+		this.removePointsInput = new NumberTextInput(this, this.commandPrefix, removePointsCommand, {
 			min: 1,
 			label: "Remove point(s)",
 			submitText: "Remove",
@@ -112,7 +114,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 		});
 		this.removePointsInput.active = hostInformation;
 
-		this.storedMessageInput = new MultiTextInput(room, this.commandPrefix, storedMessageInputCommand, {
+		this.storedMessageInput = new MultiTextInput(this, this.commandPrefix, storedMessageInputCommand, {
 			inputCount: 2,
 			labels: ['Key', 'Message'],
 			textAreas: [false, true],
@@ -124,7 +126,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 		});
 		this.storedMessageInput.active = hostInformation;
 
-		this.twistInput = new TextInput(room, this.commandPrefix, twistInputCommand, {
+		this.twistInput = new TextInput(this, this.commandPrefix, twistInputCommand, {
 			currentInput: room.userHostedGame && room.userHostedGame.twist ? room.userHostedGame.twist : "",
 			label: "Enter twist",
 			textArea: true,
@@ -163,10 +165,10 @@ export class GameHostControlPanel extends HtmlPageBase {
 			reRender: () => this.send(),
 		};
 
-		this.manualHostDisplay = new ManualHostDisplay(room, this.commandPrefix, manualHostDisplayCommand, hostDisplayProps);
+		this.manualHostDisplay = new ManualHostDisplay(this, this.commandPrefix, manualHostDisplayCommand, hostDisplayProps);
 		this.manualHostDisplay.active = !hostInformation;
 
-		this.randomHostDisplay = new RandomHostDisplay(room, this.commandPrefix, randomHostDisplayCommand,
+		this.randomHostDisplay = new RandomHostDisplay(this, this.commandPrefix, randomHostDisplayCommand,
 			Object.assign({random: true}, hostDisplayProps));
 		this.randomHostDisplay.active = false;
 
@@ -566,6 +568,20 @@ export class GameHostControlPanel extends HtmlPageBase {
 		if (game) {
 			this.generateHintsGameHtml = game.getMascotAndNameHtml(undefined, true);
 			this.generatedAnswer = game.getRandomAnswer!();
+
+			let attempts = 0;
+			while (this.exceedsMessageSizeLimit() && attempts < 100) {
+				attempts++;
+				this.generatedAnswer = game.getRandomAnswer!();
+			}
+
+			if (this.exceedsMessageSizeLimit()) {
+				this.generatedAnswer = undefined;
+				this.generatedAnswerErrorHtml = "A random answer could not be generated. Please try again!";
+			} else {
+				this.generatedAnswerErrorHtml = "";
+			}
+
 			game.deallocate(true);
 		}
 
@@ -600,7 +616,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 	render(): string {
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>" + this.room.title + ": Hosting Control " +
 			"Panel</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br /><br />";
 
 		const user = Users.get(this.userId);
@@ -705,7 +721,8 @@ export class GameHostControlPanel extends HtmlPageBase {
 			const storedMessageKeys = game.storedMessages ? Object.keys(game.storedMessages) : [];
 			if (storedMessageKeys.length) {
 				for (const key of storedMessageKeys) {
-					html += "<br />" + (key || "(none)") + " | <code>" + game.storedMessages![key] + "</code>";
+					html += "<br />" + Tools.escapeHTML(key || "(none)") + " | <code>" + Tools.escapeHTML(game.storedMessages![key]) +
+						"</code>";
 					html += "&nbsp;" + this.getQuietPmButton(Config.commandCharacter + "unstore, " + this.room.id +
 						(key ? ", " + key : ""), "Clear");
 					html += "&nbsp;" + Client.getMsgRoomButton(this.room,
@@ -720,7 +737,7 @@ export class GameHostControlPanel extends HtmlPageBase {
 
 			html += "<b>Twist</b>: ";
 			if (game.twist) {
-				html += "<br />" + game.twist;
+				html += "<br />" + Tools.escapeHTML(game.twist);
 				html += "&nbsp;" + this.getQuietPmButton(Config.commandCharacter + "removetwist, " + this.room.id, "Clear");
 				html += "&nbsp;" + Client.getMsgRoomButton(this.room, Config.commandCharacter + "twist", "Send to " + this.room.title);
 			}
@@ -763,6 +780,8 @@ export class GameHostControlPanel extends HtmlPageBase {
 				html += "<br /><br />";
 				html += "<b>Answer" + (this.generatedAnswer.answers.length > 1 ? "s" : "") + "</b>: " +
 					this.generatedAnswer.answers.join(", ") + "</div>";
+			} else if (this.generatedAnswerErrorHtml) {
+				html += this.generatedAnswerErrorHtml;
 			} else {
 				html += "<center><b>Click on a game's name to generate a hint and see the answer</b>!</center>";
 			}
@@ -799,7 +818,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand && cmd !== autoRefreshCommand && cmd !== setCurrentPlayerCommand &&
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND && cmd !== autoRefreshCommand && cmd !== setCurrentPlayerCommand &&
 				cmd !== sendDisplayCommand) {
 				new GameHostControlPanel(targetRoom, user);
 			}
@@ -833,7 +852,7 @@ export const commands: BaseCommandDefinitions = {
 			} else if (cmd === sendDisplayCommand) {
 				if (!(user.id in pages)) return;
 				pages[user.id].sendHostDisplay();
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				const error = pages[user.id].checkComponentCommands(cmd, targets);

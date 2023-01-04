@@ -235,6 +235,7 @@ export interface IDatabase {
 	pastUserHostedGames?: IPastGame[];
 	queuedScriptedGame?: IQueuedScriptedGame;
 	queuedTournament?: IQueuedTournament;
+	randomTournamentFormats?: string[];
 	roomSampleTeamsLink?: string;
 	scriptedGameCounts?: Dict<number>;
 	scriptedGameStats?: IGameStat[];
@@ -243,6 +244,7 @@ export interface IDatabase {
 	tournamentManagers?: string[];
 	tournamentGameBanlist?: Dict<ITournamentGameBan>;
 	tournamentTrainerCards?: Dict<ITournamentTrainerCard>;
+	unlockedTournamentPointsShopRibbons?: Dict<string[]>;
 	unsortedLeaderboard?: ILeaderboard;
 	userHostedGameCounts?: Dict<number>;
 	userHostedGameStats?: Dict<IGameStat[]>;

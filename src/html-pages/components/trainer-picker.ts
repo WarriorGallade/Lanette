@@ -1,5 +1,5 @@
-import type { Room } from "../../rooms";
 import type { TrainerSpriteId } from "../../types/dex";
+import type { HtmlPageBase } from "../html-page-base";
 import { type IPageElement, Pagination } from "./pagination";
 import type { IPickerProps } from "./picker-base";
 import { PickerBase } from "./picker-base";
@@ -16,7 +16,7 @@ interface ITrainerPickerProps extends IPickerProps<ITrainerPick> {
 	onSetTrainerGen: (index: number, trainerGen: TrainerGeneration, dontRender: boolean | undefined) => void;
 }
 
-export type TrainerGeneration = 'default' | 'gen1' | 'gen2' | 'gen3' | 'gen4' | 'gen5' | 'gen6' | 'gen7' | 'gen8' | 'masters';
+export type TrainerGeneration = 'default' | 'gen1' | 'gen2' | 'gen3' | 'gen4' | 'gen5' | 'gen6' | 'gen7' | 'gen8' | 'gen9' | 'masters';
 
 const genOneSuffixes: string[] = ['gen1', 'gen1rb', 'gen1two', 'gen1rbtwo', 'gen1champion', 'gen1rbchampion', 'gen1main', 'gen1title'];
 const genTwoSuffixes: string[] = ['gen2', 'gen2jp', 'gen2kanto', 'gen2c', 'gen2alt'];
@@ -26,6 +26,7 @@ const genFiveSuffixes: string[] = ['gen5', 'gen5bw', 'gen5bw2'];
 const genSixSuffixes: string[] = ['gen6', 'gen6xy', 'gen6oras'];
 const genSevenSuffixes: string[] = ['gen7'];
 const genEightSuffixes: string[] = ['gen8'];
+const genNineSuffixes: string[] = ['gen9'];
 
 const pagesLabel = "Trainers";
 
@@ -38,10 +39,11 @@ export const genFiveTrainers = 'gen5';
 export const genSixTrainers = 'gen6';
 export const genSevenTrainers = 'gen7';
 export const genEightTrainers = 'gen8';
+export const genNineTrainers = 'gen9';
 export const mastersTrainers = 'masters';
 
 export const trainerGens: TrainerGeneration[] = [defaultTrainers, genOneTrainers, genTwoTrainers, genThreeTrainers, genFourTrainers,
-	genFiveTrainers, genSixTrainers, genSevenTrainers, genEightTrainers, mastersTrainers];
+	genFiveTrainers, genSixTrainers, genSevenTrainers, genEightTrainers, genNineTrainers, mastersTrainers];
 
 const trainersListCommand = 'trainerslist';
 const refreshCustomAvatarCommand = 'refreshcommandavatar';
@@ -71,6 +73,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 	static genSevenTrainerNames: Dict<string> = {};
 	static genEightTrainerIds: TrainerSpriteId[] = [];
 	static genEightTrainerNames: Dict<string> = {};
+	static genNineTrainerIds: TrainerSpriteId[] = [];
+	static genNineTrainerNames: Dict<string> = {};
 	static mastersTrainerIds: TrainerSpriteId[] = [];
 	static mastersTrainerNames: Dict<string> = {};
 	static TrainerPickerLoaded: boolean = false;
@@ -89,12 +93,13 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 	genSixTrainersPagination: Pagination;
 	genSevenTrainersPagination: Pagination;
 	genEightTrainersPagination: Pagination;
+	genNineTrainersPagination: Pagination;
 	mastersTrainersPagination: Pagination;
 
 	paginations: Pagination[] = [];
 
-	constructor(room: Room, parentCommandPrefix: string, componentCommand: string, props: ITrainerPickerProps) {
-		super(room, parentCommandPrefix, componentCommand, props);
+	constructor(htmlPage: HtmlPageBase, parentCommandPrefix: string, componentCommand: string, props: ITrainerPickerProps) {
+		super(htmlPage, parentCommandPrefix, componentCommand, props);
 
 		TrainerPicker.loadData();
 
@@ -116,6 +121,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 				this.trainerGen = genSevenTrainers;
 			} else if (TrainerPicker.genEightTrainerIds.includes(id)) {
 				this.trainerGen = genEightTrainers;
+			} else if (TrainerPicker.genNineTrainerIds.includes(id)) {
+				this.trainerGen = genNineTrainers;
 			} else if (TrainerPicker.mastersTrainerIds.includes(id)) {
 				this.trainerGen = mastersTrainers;
 			}
@@ -157,13 +164,17 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 			this.choices[i] = {trainer: i as TrainerSpriteId, gen: genEightTrainers};
 		}
 
+		for (const i in TrainerPicker.genNineTrainerNames) {
+			this.choices[i] = {trainer: i as TrainerSpriteId, gen: genNineTrainers};
+		}
+
 		for (const i in TrainerPicker.mastersTrainerNames) {
 			this.choices[i] = {trainer: i as TrainerSpriteId, gen: mastersTrainers};
 		}
 
 		this.renderChoices();
 
-		this.defaultTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.defaultTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.defaultTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: defaultTrainersPerRow,
 			rowsPerPage,
@@ -175,7 +186,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.defaultTrainersPagination.active = this.trainerGen === defaultTrainers;
 
-		this.genOneTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genOneTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genOneTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -187,7 +198,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genOneTrainersPagination.active = this.trainerGen === genOneTrainers;
 
-		this.genTwoTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genTwoTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genTwoTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -199,7 +210,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genTwoTrainersPagination.active = this.trainerGen === genTwoTrainers;
 
-		this.genThreeTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genThreeTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genThreeTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -211,7 +222,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genThreeTrainersPagination.active = this.trainerGen === genThreeTrainers;
 
-		this.genFourTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genFourTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genFourTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -223,7 +234,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genFourTrainersPagination.active = this.trainerGen === genFourTrainers;
 
-		this.genFiveTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genFiveTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genFiveTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -235,7 +246,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genFiveTrainersPagination.active = this.trainerGen === genFiveTrainers;
 
-		this.genSixTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genSixTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genSixTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -247,7 +258,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genSixTrainersPagination.active = this.trainerGen === genSixTrainers;
 
-		this.genSevenTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genSevenTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genSevenTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -259,7 +270,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genSevenTrainersPagination.active = this.trainerGen === genSevenTrainers;
 
-		this.genEightTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genEightTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.genEightTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -271,7 +282,19 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		});
 		this.genEightTrainersPagination.active = this.trainerGen === genEightTrainers;
 
-		this.mastersTrainersPagination = new Pagination(room, this.commandPrefix, trainersListCommand, {
+		this.genNineTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
+			elements: [this.noPickElement].concat(TrainerPicker.genNineTrainerIds.map(x => this.choiceElements[x])),
+			elementsPerRow: olderTrainersPerRow,
+			rowsPerPage,
+			pagesLabel,
+			noPickElement: true,
+			onSelectPage: () => this.props.reRender(),
+			readonly: this.props.readonly,
+			reRender: () => this.props.reRender(),
+		});
+		this.genNineTrainersPagination.active = this.trainerGen === genNineTrainers;
+
+		this.mastersTrainersPagination = new Pagination(htmlPage, this.commandPrefix, trainersListCommand, {
 			elements: [this.noPickElement].concat(TrainerPicker.mastersTrainerIds.map(x => this.choiceElements[x])),
 			elementsPerRow: olderTrainersPerRow,
 			rowsPerPage,
@@ -287,7 +310,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 
 		this.components = [this.defaultTrainersPagination, this.genOneTrainersPagination, this.genTwoTrainersPagination,
 			this.genThreeTrainersPagination, this.genFourTrainersPagination, this.genFiveTrainersPagination, this.genSixTrainersPagination,
-			this.genSevenTrainersPagination, this.genEightTrainersPagination, this.mastersTrainersPagination];
+			this.genSevenTrainersPagination, this.genEightTrainersPagination, this.genNineTrainersPagination,
+			this.mastersTrainersPagination];
 
 		this.paginations = this.components.slice() as Pagination[];
 
@@ -334,6 +358,9 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 				} else if (genEightSuffixes.includes(gen)) {
 					this.genEightTrainerIds.push(trainerId);
 					this.genEightTrainerNames[trainerId] = trainerSprites[trainerId];
+				} else if (genNineSuffixes.includes(gen)) {
+					this.genNineTrainerIds.push(trainerId);
+					this.genNineTrainerNames[trainerId] = trainerSprites[trainerId];
 				} else {
 					throw new Error("Unsupported trainer gen: " + gen);
 				}
@@ -341,6 +368,12 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 				trainerSprites[trainerId].endsWith("-masters3")) {
 				this.mastersTrainerIds.push(trainerId);
 				this.mastersTrainerNames[trainerId] = trainerSprites[trainerId];
+			} else if (trainerSprites[trainerId].endsWith("-usum") || trainerSprites[trainerId].endsWith("-lgpe")) {
+				this.genSevenTrainerIds.push(trainerId);
+				this.genSevenTrainerNames[trainerId] = trainerSprites[trainerId];
+			} else if (trainerSprites[trainerId].endsWith("-dojo")) {
+				this.genEightTrainerIds.push(trainerId);
+				this.genEightTrainerNames[trainerId] = trainerSprites[trainerId];
 			} else {
 				this.defaultTrainerIds.push(trainerId);
 				this.defaultTrainerNames[trainerId] = trainerSprites[trainerId];
@@ -438,6 +471,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		this.genSixTrainersPagination.active = this.trainerGen === genSixTrainers;
 		this.genSevenTrainersPagination.active = this.trainerGen === genSevenTrainers;
 		this.genEightTrainersPagination.active = this.trainerGen === genEightTrainers;
+		this.genNineTrainersPagination.active = this.trainerGen === genNineTrainers;
 		this.mastersTrainersPagination.active = this.trainerGen === mastersTrainers;
 
 		if (autoSelectPage) {
@@ -477,6 +511,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 			trainers = TrainerPicker.genSevenTrainerIds;
 		} else if (trainerGen === genEightTrainers) {
 			trainers = TrainerPicker.genEightTrainerIds;
+		} else if (trainerGen === genNineTrainers) {
+			trainers = TrainerPicker.genNineTrainerIds;
 		} else {
 			trainers = TrainerPicker.mastersTrainerIds;
 		}
@@ -508,7 +544,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 
 		if (cmd === defaultTrainers || cmd === genOneTrainers || cmd === genTwoTrainers || cmd === genThreeTrainers ||
 			cmd === genFourTrainers || cmd === genFiveTrainers || cmd === genSixTrainers || cmd === genSevenTrainers ||
-			cmd === genEightTrainers || cmd === mastersTrainers) {
+			cmd === genEightTrainers || cmd === genNineTrainers || cmd === mastersTrainers) {
 			this.pickTrainerGen(cmd);
 		} else if (cmd === refreshCustomAvatarCommand) {
 			if (!this.props.userId || this.refreshingCustomAvatar) return;
@@ -519,7 +555,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 			this.props.reRender();
 
 			Client.getUserDetails(user, updatedUser => {
-				if (this.closed) return;
+				if (this.destroyed) return;
 
 				if (updatedUser.avatar && updatedUser.customAvatar) {
 					this.updateCustomAvatar(updatedUser.avatar);
@@ -548,6 +584,7 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 		const currentGenSixTrainers = this.trainerGen === genSixTrainers;
 		const currentGenSevenTrainers = this.trainerGen === genSevenTrainers;
 		const currentGenEightTrainers = this.trainerGen === genEightTrainers;
+		const currentGenNineTrainers = this.trainerGen === genNineTrainers;
 		const currentMastersTrainers = this.trainerGen === mastersTrainers;
 
 		let html = "<b>Trainer sprite</b><br />";
@@ -571,6 +608,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 			{selectedAndDisabled: currentGenSevenTrainers});
 		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + genEightTrainers, "Gen 8",
 			{selectedAndDisabled: currentGenEightTrainers});
+		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + genNineTrainers, "Gen 9",
+			{selectedAndDisabled: currentGenNineTrainers});
 		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + ", " + mastersTrainers, "Masters",
 			{selectedAndDisabled: currentMastersTrainers});
 
@@ -603,6 +642,8 @@ export class TrainerPicker extends PickerBase<ITrainerPick, ITrainerPickerProps>
 				html += this.genSevenTrainersPagination.render();
 			} else if (currentGenEightTrainers) {
 				html += this.genEightTrainersPagination.render();
+			} else if (currentGenNineTrainers) {
+				html += this.genNineTrainersPagination.render();
 			} else {
 				html += this.mastersTrainersPagination.render();
 			}

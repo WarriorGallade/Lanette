@@ -3,10 +3,9 @@ import type { Player } from "../room-activity";
 import type { Room } from "../rooms";
 import type { GameCommandDefinitions, IGameAchievement, IGameFile } from "../types/games";
 import type { User } from "../users";
-import type { BoardActionCard, IBoard } from "./templates/board";
-import { BoardSpace } from "./templates/board";
+import type { BoardActionCard } from "./templates/board";
 import {
-	BoardActionSpace, BoardPropertyGame, BoardPropertyRentSpace, BoardRentSpace, game as boardPropertyGame, mountainPrefix
+	BoardPropertyGame, type BoardPropertyRentSpace, game as boardPropertyGame
 } from "./templates/board-property";
 
 type AchievementNames = "ohbabyatriple" | "cheapskate" | "realestatetycoon" | "mountainmover";
@@ -16,85 +15,9 @@ const BID_MULTIPLE = 5;
 const POKE_DOLLAR = "Poké";
 const JELLICENT_CARD = "Jellicent Card";
 
-interface IBoardSpaces {
-	oakslab: BoardSpace;
-	action: BoardActionSpace;
-	pyritetownjail: BoardSpace;
-	pallet: BoardPropertyRentSpace;
-	littleroot: BoardPropertyRentSpace;
-	twinleaf: BoardPropertyRentSpace;
-	diglettscave: BoardPropertyRentSpace;
-	diglettstunnel: BoardPropertyRentSpace;
-
-	mtmoon: BoardPropertyRentSpace;
-	mtsilver: BoardPropertyRentSpace;
-	mtpyre: BoardPropertyRentSpace;
-	mtcoronet: BoardPropertyRentSpace;
-
-	lakeacuity: BoardPropertyRentSpace;
-	lakeverity: BoardPropertyRentSpace;
-	lakevalor: BoardPropertyRentSpace;
-	battlefactory: BoardPropertyRentSpace;
-	battlemaison: BoardPropertyRentSpace;
-
-	pokemoncenter: BoardSpace;
-	viridianforest: BoardPropertyRentSpace;
-	eternaforest: BoardPropertyRentSpace;
-	pinwheelforest: BoardPropertyRentSpace;
-	whitetreehollow: BoardPropertyRentSpace;
-	blackcity: BoardPropertyRentSpace;
-	pokemart: BoardRentSpace;
-
-	jubilife: BoardPropertyRentSpace;
-	castelia: BoardPropertyRentSpace;
-	lumiose: BoardPropertyRentSpace;
-	ultraspace: BoardPropertyRentSpace;
-	distortionworld: BoardPropertyRentSpace;
-}
-
-const spaces: IBoardSpaces = {
-	// leftColumn
-	oakslab: new BoardSpace("Oak's Lab", "White"),
-	action: new BoardActionSpace("Action", "Light-Pink"),
-	pyritetownjail: new BoardSpace("Pyrite Town Jail", "Gray"),
-	pallet: new BoardPropertyRentSpace("Pallet", "Red", 100),
-	littleroot: new BoardPropertyRentSpace("Littleroot", "Red", 100),
-	twinleaf: new BoardPropertyRentSpace("Twinleaf", "Red", 100),
-	diglettscave: new BoardPropertyRentSpace("Diglett's Cave", "Red-Violet", 150),
-	diglettstunnel: new BoardPropertyRentSpace("Diglett's Tunnel", "Red-Violet", 150),
-
-	mtmoon: new BoardPropertyRentSpace(mountainPrefix + " Moon", "Dark-Brown", 200),
-	mtsilver: new BoardPropertyRentSpace(mountainPrefix + " Silver", "Dark-Brown", 200),
-	mtpyre: new BoardPropertyRentSpace(mountainPrefix + " Pyre", "Dark-Brown", 200),
-	mtcoronet: new BoardPropertyRentSpace(mountainPrefix + " Coronet", "Dark-Brown", 200),
-
-	// top row
-	lakeacuity: new BoardPropertyRentSpace("Lake Acuity", "Violet", 200),
-	lakeverity: new BoardPropertyRentSpace("Lake Verity", "Violet", 200),
-	lakevalor: new BoardPropertyRentSpace("Lake Valor", "Violet", 200),
-	battlefactory: new BoardPropertyRentSpace("Battle Factory", "Blue-Violet", 250),
-	battlemaison: new BoardPropertyRentSpace("Battle Maison", "Blue-Violet", 250),
-
-	// right column
-	pokemoncenter: new BoardSpace("Pokemon Center", "Blue"),
-	viridianforest: new BoardPropertyRentSpace("Viridian Forest", "Green", 300),
-	eternaforest: new BoardPropertyRentSpace("Eterna Forest", "Green", 300),
-	pinwheelforest: new BoardPropertyRentSpace("Pinwheel Forest", "Green", 300),
-	whitetreehollow: new BoardPropertyRentSpace("White Treehollow", "Yellow", 350),
-	blackcity: new BoardPropertyRentSpace("Black City", "Yellow", 350),
-	pokemart: new BoardRentSpace("Poke Mart", "Blue", 'random'),
-
-	// bottom row
-	jubilife: new BoardPropertyRentSpace("Jubilife", "Orange", 400),
-	castelia: new BoardPropertyRentSpace("Castelia", "Orange", 400),
-	lumiose: new BoardPropertyRentSpace("Lumiose", "Orange", 400),
-	ultraspace: new BoardPropertyRentSpace("Ultra Space", "Red-Orange", 500),
-	distortionworld: new BoardPropertyRentSpace("Distortion World", "Red-Orange", 500),
-};
-
 const doublesRollsAchievementAmount = 3;
 
-class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
+class JellicentsPhantomFinances extends BoardPropertyGame {
 	static achievements: KeyedDict<AchievementNames, IGameAchievement> = {
 		"ohbabyatriple": {name: "Oh Baby A Triple", type: 'special', bits: 1000, description: 'roll doubles ' +
 			doublesRollsAchievementAmount + ' times in one round'},
@@ -110,18 +33,6 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 	acquirePropertyActionPast: string = "bought";
 	auctionUhtmlName: string = '';
 	availablePropertyState: string = "vacant";
-	board: IBoard = {
-		leftColumn: [spaces.oakslab, spaces.pallet, spaces.littleroot, spaces.action, spaces.twinleaf, spaces.mtmoon, spaces.action,
-			spaces.diglettscave, spaces.diglettstunnel, spaces.pyritetownjail,
-		],
-		topRow: [spaces.lakeacuity, spaces.lakeverity, spaces.action, spaces.lakevalor, spaces.mtsilver, spaces.action,
-			spaces.battlefactory, spaces.battlemaison],
-		rightColumn: [spaces.pokemoncenter, spaces.viridianforest, spaces.eternaforest, spaces.action, spaces.pinwheelforest,
-			spaces.mtpyre, spaces.action, spaces.whitetreehollow, spaces.blackcity, spaces.pokemart,
-		],
-		bottomRow: [spaces.jubilife, spaces.castelia, spaces.action, spaces.lumiose, spaces.mtcoronet, spaces.action, spaces.ultraspace,
-			spaces.distortionworld],
-	};
 	canBid: boolean = false;
 	currencyName: string = POKE_DOLLAR;
 	currencyPluralName: string = POKE_DOLLAR;
@@ -131,14 +42,13 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 	escapeFromJailCard: string = JELLICENT_CARD;
 	highestBidAmount: number = 0;
 	highestBidder: Player | null = null;
-	jailSpace: BoardSpace = spaces.pyritetownjail;
 	maxCurrency: number = 4000;
 	passingGoCurrency: number = 200;
 	rafflePrize: number = 200;
 	raffleRunner: string = "Jellicent";
-	spaces: IBoardSpaces = spaces;
 	startingCurrency: number = 1500;
 	timeLimit = 25 * 60 * 1000;
+	useCost = true;
 	winCondition = 'currency' as const;
 
 	baseActionCards: BoardActionCard<JellicentsPhantomFinances>[];
@@ -171,7 +81,7 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 				}
 
 				this.on(text, () => {
-					this.timeout = setTimeout(() => this.beforeNextRound(), this.roundTime);
+					this.setTimeout(() => this.beforeNextRound(), this.roundTime);
 				});
 				this.say(text);
 			},
@@ -185,23 +95,14 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 					this.playerCurrency.set(player, this.playerCurrency.get(player)! + amount);
 				}
 				this.on(text, () => {
-					this.timeout = setTimeout(() => this.beforeNextRound(), this.roundTime);
+					this.setTimeout(() => this.beforeNextRound(), this.roundTime);
 				});
 				this.say(text);
 			},
 		];
 	}
 
-	onStart(): void {
-		super.onStart();
-
-		for (const player of this.playerOrder) {
-			this.playerCurrency.set(player, this.startingCurrency);
-			this.properties.set(player, []);
-		}
-	}
-
-	getActionCards(): BoardActionCard<BoardPropertyGame<IBoardSpaces>>[] {
+	getActionCards(): BoardActionCard<BoardPropertyGame>[] {
 		// @ts-expect-error
 		return this.sharedActionCards.concat(this.baseActionCards);
 	}
@@ -236,14 +137,14 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 		if (this.acquireProperties) {
 			const text = "They do not have enough " + this.currencyPluralName + " so an auction will begin!";
 			this.on(text, () => {
-				this.timeout = setTimeout(() => {
+				this.setTimeout(() => {
 					this.propertyToAcquire = property;
 					this.beginAuction();
 				}, this.roundTime);
 			});
 			this.say(text);
 		} else {
-			this.timeout = setTimeout(() => {
+			this.setTimeout(() => {
 				this.propertyToAcquire = property;
 				this.beginAuction();
 			}, this.roundTime);
@@ -257,7 +158,7 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 		this.say("Place your bids for **" + this.propertyToAcquire!.name + "** (cost: **" + this.propertyToAcquire!.cost + " " +
 			POKE_DOLLAR + "**) with ``" + Config.commandCharacter + "bid [amount]``!");
 		this.canBid = true;
-		this.timeout = setTimeout(() => this.sellProperty(), 10 * 1000);
+		this.setTimeout(() => this.sellProperty(), 10 * 1000);
 	}
 
 	sellProperty(): void {
@@ -272,7 +173,7 @@ class JellicentsPhantomFinances extends BoardPropertyGame<IBoardSpaces> {
 		} else {
 			this.say("No one bid for **" + this.propertyToAcquire!.name + "**!");
 		}
-		this.timeout = setTimeout(() => this.beforeNextRound(), this.roundTime);
+		this.setTimeout(() => this.beforeNextRound(), this.roundTime);
 	}
 }
 
@@ -288,17 +189,19 @@ const commands: GameCommandDefinitions<JellicentsPhantomFinances> = {
 				player.say("You cannot bid more " + POKE_DOLLAR + " than you currently have!");
 				return false;
 			}
+
 			if (amount % BID_MULTIPLE !== 0) {
 				player.say("You must bid by a multiple of " + BID_MULTIPLE + " " + POKE_DOLLAR + ".");
 				return false;
 			}
+
 			this.highestBidder = player;
 			this.highestBidAmount = amount;
 			if (this.timeout) clearTimeout(this.timeout);
 			this.sayUhtml(this.auctionUhtmlName, "<b>Bidding for</b>: " + this.propertyToAcquire!.name + " (worth " +
 				this.propertyToAcquire!.cost + " " + POKE_DOLLAR + ")<br /><br />The current highest bid is <b>" + amount + " " +
 				POKE_DOLLAR + "</b> from <b>" + player.name + "</b>!");
-			this.timeout = setTimeout(() => this.sellProperty(), 5 * 1000);
+			this.setTimeout(() => this.sellProperty(), 5 * 1000);
 			return true;
 		},
 	},
@@ -320,6 +223,12 @@ export const game: IGameFile<JellicentsPhantomFinances> = Games.copyTemplateProp
 			name: "Auction-only Jellicent's Phantom Finances",
 			variantAliases: ['Auction-only', 'Auctions-only', 'auction', 'auctions'],
 			acquireProperties: false,
+		},
+		{
+			name: "Jellicent's Phantom Finances: Loop",
+			variantAliases: ['loop', 'circle'],
+			boardType: 'circle',
+			reverseDirections: true,
 		},
 	],
 });

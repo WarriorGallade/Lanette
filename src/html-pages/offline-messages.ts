@@ -3,7 +3,7 @@ import type { BaseCommandDefinitions } from "../types/command-parser";
 import type { IOfflineMessage } from "../types/storage";
 import type { TimeZone } from "../types/tools";
 import type { User } from "../users";
-import { HtmlPageBase } from "./html-page-base";
+import { CLOSE_COMMAND, HtmlPageBase } from "./html-page-base";
 
 const EXPIRATION_DAYS = 30;
 const MESSAGE_EXPIRATION_TIME = EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
@@ -17,11 +17,8 @@ const timezoneCommand = 'timezone';
 const dateCommand = 'date';
 const discardCommand = 'discard';
 const undoDiscardCommand = 'undodiscard';
-const closeCommand = 'close';
 
-const pageId = 'offline-messages';
-
-export const id = pageId;
+export const pageId = 'offline-messages';
 export const pages: Dict<OfflineMessages> = {};
 
 class OfflineMessages extends HtmlPageBase {
@@ -31,6 +28,7 @@ class OfflineMessages extends HtmlPageBase {
 	dateOptions: string[] = [];
 	discardedMessages: IOfflineMessage[] = [];
 	displayedMessagesByDate: Dict<string> = {};
+	globalRoomPage = true;
 	hoursOffset: number = 0;
 	oldMessages: IOfflineMessage[] = [];
 	messagesPage: number = 0;
@@ -45,6 +43,7 @@ class OfflineMessages extends HtmlPageBase {
 		super(room, user, baseCommand, pages);
 
 		this.commandPrefix = Config.commandCharacter + baseCommand;
+		this.setCloseButton();
 
 		const database = Storage.getGlobalDatabase();
 		const timezone = database.offlineMessages![this.userId].timezone;
@@ -267,7 +266,7 @@ class OfflineMessages extends HtmlPageBase {
 		const database = Storage.getGlobalDatabase();
 
 		let html = "<div class='chat' style='margin-top: 4px;margin-left: 4px'><center><b>Your Offline Messages</b>";
-		html += "&nbsp;" + this.getQuietPmButton(this.commandPrefix + " " + closeCommand, "Close");
+		html += "&nbsp;" + this.closeButtonHtml;
 		html += "<br />Re-read them at any time by PMing " + Users.self.name + " the command <code>" + Config.commandCharacter +
 			reReadCommand + "</code>";
 		html += "<br />(messages are permanently deleted <b>" + EXPIRATION_DAYS + " days</b> after you receive them)</center>";
@@ -346,7 +345,7 @@ export const commands: BaseCommandDefinitions = {
 				return;
 			}
 
-			if (!(user.id in pages) && cmd !== closeCommand) new OfflineMessages(botRoom, user);
+			if (!(user.id in pages) && cmd !== CLOSE_COMMAND) new OfflineMessages(botRoom, user);
 
 			if (cmd === newMessagesCommand) {
 				pages[user.id].selectNewMessages();
@@ -375,7 +374,7 @@ export const commands: BaseCommandDefinitions = {
 				pages[user.id].discardOrUndoDiscard();
 			} else if (cmd === dateCommand) {
 				if (!pages[user.id].setDate(targets[0].trim())) this.say("Invalid date.");
-			} else if (cmd === closeCommand) {
+			} else if (cmd === CLOSE_COMMAND) {
 				if (user.id in pages) pages[user.id].close();
 			} else {
 				this.say("Unknown sub-command '" + cmd + "'.");

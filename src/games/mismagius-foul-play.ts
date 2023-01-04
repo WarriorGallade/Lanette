@@ -39,7 +39,7 @@ class MismagiusFoulPlay extends ScriptedGame {
 	roundGuesses = new Map<Player, boolean>();
 
 	static loadData(): void {
-		const pokemonList = Games.getPokemonList(x => x.baseSpecies === x.name);
+		const pokemonList = Games.getPokemonList({filter: x => x.baseSpecies === x.name});
 		for (const pokemon of pokemonList) {
 			const learnsetData = Dex.getLearnsetData(pokemon.id);
 			if (!learnsetData || !learnsetData.learnset) continue;
@@ -90,7 +90,7 @@ class MismagiusFoulPlay extends ScriptedGame {
 		for (const i in this.players) {
 			this.players[i].say("Please select a Pokemon to play as with ``.select``!");
 		}
-		this.timeout = setTimeout(() => this.chooseCriminals(), 30 * 1000);
+		this.setTimeout(() => this.chooseCriminals(), 30 * 1000);
 	}
 
 	chooseCriminals(): void {
@@ -195,7 +195,7 @@ class MismagiusFoulPlay extends ScriptedGame {
 		const html = "<center><b>Param " + this.round + "</b>: " + param + "<br /><br /><b>Pokemon</b>: " + pokemonList.join(", ") +
 			"<br /><br /><b>Players</b>: " + players.join(", ") + "</center>";
 		this.onHtml(html, () => {
-			this.timeout = setTimeout(() => this.nextRound(), 45 * 1000);
+			this.setTimeout(() => this.nextRound(), 45 * 1000);
 		});
 		this.sayHtml(html);
 	}
