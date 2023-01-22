@@ -31,6 +31,8 @@ export interface IRoundTeamRequirements {
 	evolutionsThisRound: number;
 }
 
+export const DEFAULT_BATTLE_FORMAT_ID = 'gen9ou';
+
 const REROLL_COMMAND = "reroll";
 const TOUR_PAGE_COMMAND = "tourpage";
 const HTML_PAGE_COMMAND = "battleeliminationhtmlpage";
@@ -52,7 +54,7 @@ export abstract class BattleElimination extends ScriptedGame {
 	allowsSingleStage: boolean = false;
 	availableMatchNodes: EliminationNode<Player>[] = [];
 	banlist: string[] = [];
-	battleFormatId: string = 'gen8ou';
+	battleFormatId: string = DEFAULT_BATTLE_FORMAT_ID;
 	battleFormatType: GameType = 'singles';
 	readonly battleData = new Map<Room, IBattleGameData>();
 	readonly battleRooms: string[] = [];
@@ -106,7 +108,9 @@ export abstract class BattleElimination extends ScriptedGame {
 	rerolls = new Map<Player, boolean>();
 	rerollStartDelay: number = REROLL_START_DELAY;
 	requiredTier: string | null = null;
+	requiredDoublesTier: string | null = null;
 	rulesHtml: string = "";
+	sameRoomSubRoom: boolean = false;
 	sharedTeams: boolean = false;
 	spectatorPlayers = new Set<Player>();
 	starterPokemon = new Map<Player, readonly string[]>();
@@ -127,6 +131,8 @@ export abstract class BattleElimination extends ScriptedGame {
 	declare readonly room: Room;
 
 	validateInputProperties(inputProperties: IGameInputProperties): boolean {
+		const baseFormat = Dex.getExistingFormat(this.battleFormatId);
+
 		if (inputProperties.options.format) {
 			if (!this.canChangeFormat) {
 				this.say("You cannot change the format for " + this.format.nameWithOptions + ".");
@@ -147,9 +153,11 @@ export abstract class BattleElimination extends ScriptedGame {
 				this.say("Unable to generate enough valid Pokemon for the format " + battleFormat.name + ".");
 				return false;
 			}
-
-			this.format.nameWithOptions += ": " + battleFormat.nameWithoutGen;
 		}
+
+		const customRules = this.getGameCustomRules ? this.getGameCustomRules() : [];
+		const inputRules: string[] = [];
+		const battleFormatIdBeforeRules = this.battleFormatId;
 
 		if (inputProperties.options.rules) {
 			if (!this.canChangeFormat) {
@@ -157,8 +165,15 @@ export abstract class BattleElimination extends ScriptedGame {
 				return false;
 			}
 
-			const rules = inputProperties.options.rules.split("|");
-			let formatid = Dex.joinNameAndCustomRules(this.battleFormatId, Dex.resolveCustomRuleAliases(rules));
+			const resolved = Dex.resolveCustomRuleAliases(inputProperties.options.rules.split("|"));
+			for (const rule of resolved) {
+				if (!customRules.includes(rule)) {
+					customRules.push(rule);
+					inputRules.push(rule);
+				}
+			}
+
+			let formatid = Dex.joinNameAndCustomRules(this.battleFormatId, customRules);
 			try {
 				formatid = Dex.validateFormat(formatid);
 			} catch (e) {
@@ -175,34 +190,50 @@ export abstract class BattleElimination extends ScriptedGame {
 					" with custom rules.");
 				return false;
 			}
+		} else if (customRules.length) {
+			let formatid = Dex.joinNameAndCustomRules(this.battleFormatId, customRules);
+			try {
+				formatid = Dex.validateFormat(formatid);
+			} catch (e) {
+				this.say("Error setting custom rules: " + (e as Error).message);
+				return false;
+			}
+
+			this.battleFormatId = formatid;
 		}
 
-		const format = Dex.getExistingFormat(this.battleFormatId);
-		if (format.gameType !== this.battleFormatType) {
+		const battleFormat = Dex.getExistingFormat(this.battleFormatId);
+		if (battleFormat.gameType !== this.battleFormatType) {
 			this.say("You can only change the format to another " + this.battleFormatType + " format.");
 			return false;
 		}
 
-		if (format.team) {
+		if (battleFormat.team) {
 			this.say("You cannot change the format to one that uses generated teams.");
 			return false;
 		}
 
-		const ruleTable = Dex.getRuleTable(format);
+		const ruleTable = Dex.getRuleTable(battleFormat);
 		if (!ruleTable.has("teampreview")) {
 			this.say("You can only change the format to one that has Team Preview.");
 			return false;
 		}
 
-		const oneVsOne = this.startingTeamsLength === 1 && !this.additionsPerRound;
-		const twoVsTwo = this.startingTeamsLength === 2 && !this.additionsPerRound;
+		const oneVsOne = !this.usesCloakedPokemon && this.startingTeamsLength === 1 && !this.additionsPerRound;
+		const twoVsTwo = !this.usesCloakedPokemon && this.startingTeamsLength === 2 && !this.additionsPerRound;
+		const threeVsThree = !this.usesCloakedPokemon && this.startingTeamsLength === 3 && !this.additionsPerRound;
 
-		if (ruleTable.minTeamSize > this.startingTeamsLength) {
+		if (!this.usesCloakedPokemon && ruleTable.minTeamSize > this.startingTeamsLength) {
 			this.say("You can only change the format to one that allows bringing only " + this.startingTeamsLength + " Pokemon.");
 			return false;
 		}
 
-		if (twoVsTwo) {
+		if (threeVsThree) {
+			if (ruleTable.maxTeamSize < 3) {
+				this.say("You can only change the format to one that allows bringing 3 or more Pokemon.");
+				return false;
+			}
+		} else if (twoVsTwo) {
 			if (ruleTable.maxTeamSize < 2) {
 				this.say("You can only change the format to one that allows bringing 2 or more Pokemon.");
 				return false;
@@ -224,10 +255,31 @@ export abstract class BattleElimination extends ScriptedGame {
 				this.say("You can only change the format to one that requires battling with 2 Pokemon.");
 				return false;
 			}
+		} else if (threeVsThree) {
+			if (ruleTable.pickedTeamSize && ruleTable.pickedTeamSize !== 3) {
+				this.say("You can only change the format to one that requires battling with 3 Pokemon.");
+				return false;
+			}
 		} else {
 			if (ruleTable.pickedTeamSize) {
 				this.say("You can only change the format to one that allows battling with a variable number of Pokemon.");
 				return false;
+			}
+		}
+
+		const inputRulesFormat = Dex.getFormat(Dex.joinNameAndCustomRules(battleFormatIdBeforeRules, inputRules));
+		if (inputRulesFormat) {
+			let baseName = this.format.nameWithOptions;
+			if (inputRulesFormat.name !== baseFormat.name) {
+				baseName += ": " + (inputRulesFormat.gen && inputRulesFormat.gen !== Dex.getGen() ? "Gen " +
+					inputRulesFormat.gen + " " : "") + inputRulesFormat.nameWithoutGen;
+			}
+
+			const customFormatName = Dex.getCustomFormatName(inputRulesFormat, false, baseName);
+			if (inputRules.length && customFormatName !== inputRulesFormat.name && customFormatName !== inputRulesFormat.customFormatName) {
+				this.format.nameWithOptions = customFormatName;
+			} else {
+				this.format.nameWithOptions = baseName;
 			}
 		}
 
@@ -318,6 +370,8 @@ export abstract class BattleElimination extends ScriptedGame {
 
 			if (this.requiredTier) {
 				if (pokemon.tier !== this.requiredTier) continue;
+			} else if (this.requiredDoublesTier) {
+				if (pokemon.doublesTier !== this.requiredDoublesTier) continue;
 			} else if (fullyEvolved) {
 				if ((!pokemon.prevo && !this.allowsSingleStage) || pokemon.nfe ||
 					(pokemon.forme && dex.getExistingPokemon(pokemon.baseSpecies).nfe)) continue;
@@ -1253,9 +1307,11 @@ export abstract class BattleElimination extends ScriptedGame {
 		if (this.started) {
 			html += "(the tournament has started)";
 		} else if (this.subRoom) {
-			html += Client.getCommandButton("/join " + this.subRoom.id, "-> Go to the " +
-				(this.subRoom.groupchat ? "groupchat" : "subroom") + " (" + (this.playerCap - this.playerCount) + "/" + this.playerCap +
-				" slots remaining)");
+			if (!this.sameRoomSubRoom) {
+				html += Client.getCommandButton("/join " + this.subRoom.id, "-> Go to the " +
+					(this.subRoom.groupchat ? "groupchat" : "subroom") + " (" + (this.playerCap - this.playerCount) + "/" + this.playerCap +
+					" slots remaining)");
+			}
 		} else {
 			html += Client.getPmSelfButton(Config.commandCharacter + "joingame " + this.room.title, "Join tournament") +
 				Client.getPmSelfButton(Config.commandCharacter + "leavegame " + this.room.title, "Leave tournament") +
@@ -1267,6 +1323,7 @@ export abstract class BattleElimination extends ScriptedGame {
 
 	postSignups(): void {
 		this.sayUhtmlAuto(this.uhtmlBaseName + '-signups', this.getSignupsHtml());
+
 		if (this.subRoom) {
 			this.subRoom.sayUhtml(this.uhtmlBaseName + "-join-tournament", "<b>You must join the tournament in this room to play! Click " +
 				"at the top of the chat or below</b><br /><br />" + Client.getCommandButton("/tour join", "Join tournament"));
@@ -1848,7 +1905,7 @@ export abstract class BattleElimination extends ScriptedGame {
 
 		if (!this.battleRooms.includes(room.publicId)) this.battleRooms.push(room.publicId);
 
-		if (!room.inviteOnlyBattle && this.getRemainingPlayerCount() === 2) {
+		if (!room.inviteOnlyBattle && this.getRemainingPlayerCount() === 2 && !this.sameRoomSubRoom) {
 			this.say("**Final battle of the " + this.name + " tournament:** <<" + room.id + ">>");
 		}
 
@@ -2060,7 +2117,7 @@ export abstract class BattleElimination extends ScriptedGame {
 		}
 
 		if (!database.pastTournamentGames) database.pastTournamentGames = [];
-		database.pastTournamentGames.unshift({inputTarget: this.format.inputTarget, name: this.name, time: now});
+		database.pastTournamentGames.unshift({inputTarget: this.format.inputTarget, name: this.format.nameWithOptions, time: now});
 		while (database.pastTournamentGames.length > 8) {
 			database.pastTournamentGames.pop();
 		}
@@ -2104,10 +2161,22 @@ export abstract class BattleElimination extends ScriptedGame {
 
 			const placesHtml = Tournaments.getPlacesHtml('gameLeaderboard', this.name, winners.map(x => x.name),
 				runnersUp.map(x => x.name), places.semifinalists.map(x => x.name), winnerPoints, runnerUpPoints, semiFinalistPoints);
-			this.sayHtml("<div class='infobox-limited'>" + placesHtml + "</div>");
 
 			if (winners.length === 1) {
-				Tournaments.displayTrainerCard(this.room, winners[0].name);
+				const buttonRoom = this.room.alias || this.room.id;
+
+				const tournamentPointsShop = Tournaments.hasTournamentPointsShopItems(this.room) ? Client.getQuietPmButton(this.room,
+					Config.commandCharacter + "tpshop " + buttonRoom, "Visit the points shop") : "";
+
+				Tournaments.displayTrainerCard(this.room, winners[0].name, "<div class='infobox-limited'><center>" + placesHtml +
+				"</center><br />", "<br /><center>" + Client.getQuietPmButton(this.room, Config.commandCharacter + "topbitsprivate " +
+				buttonRoom, this.room.title + " leaderboard") + "&nbsp;" +
+				Client.getQuietPmButton(this.room, Config.commandCharacter + "topbitsprivate " + buttonRoom + "," + this.format.name,
+					this.format.name + " leaderboard") + "&nbsp;" +
+				Client.getQuietPmButton(this.room, Config.commandCharacter + "ttc " + buttonRoom,
+					"Customize your profile") + tournamentPointsShop + "</center></div>");
+			} else {
+				this.sayHtml("<div class='infobox-limited'>" + placesHtml + "</div>");
 			}
 		}
 
@@ -2352,6 +2421,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should generate a bracket - 4 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2382,6 +2454,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should generate a bracket - 5 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2415,6 +2490,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should generate a bracket - 6 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2451,6 +2529,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should generate a bracket - 7 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2490,6 +2571,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should generate a bracket - 8 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2532,6 +2616,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should properly list matches by round - 4 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2560,6 +2647,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should properly list matches by round - 5 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2600,6 +2690,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should properly list matches by round - 6 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2644,6 +2737,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should properly list matches by round - 7 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2688,6 +2784,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should properly list matches by round - 8 players': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			disableTournamentProperties(game);
 
@@ -2726,6 +2825,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should give team changes until players have a full team - additionsPerRound': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			this.timeout(15000);
 			if (!game.additionsPerRound || game.dropsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;
@@ -2772,6 +2874,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should give team changes until players have a full team - dropsPerRound': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			this.timeout(15000);
 			if (!game.dropsPerRound || game.additionsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;
@@ -2818,6 +2923,9 @@ const tests: GameFileTests<BattleElimination> = {
 		},
 	},
 	'should give team changes until players have a full team - additionsPerRound and dropsPerRound': {
+		config: {
+			regressionOnly: true,
+		},
 		test(game) {
 			this.timeout(15000);
 			if (!game.additionsPerRound || !game.dropsPerRound || (game.maxPlayers !== 32 && game.maxPlayers !== 64)) return;

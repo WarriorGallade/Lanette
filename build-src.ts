@@ -3,7 +3,7 @@ import path = require('path');
 
 import type { RunOptions } from './src/types/root';
 import {
-	createUntrackedFiles, deleteFolderRecursive, deleteBuildFolders, exec, getInputFolders, getRunOptions, setToSha, transpile
+	createUntrackedFiles, deleteFolderRecursive, deletePreviousBuild, exec, getInputFolders, getRunOptions, setToSha, transpile
 } from './tools';
 
 interface IPackageJson {
@@ -62,7 +62,7 @@ export const buildSrc = async(options?: RunOptions): Promise<void> => {
 	if (!options.noBuild) {
 		console.log("Preparing to build files...");
 		if (!options.incrementalBuild) {
-			deleteBuildFolders();
+			deletePreviousBuild();
 			console.log("Deleted old build folder");
 		}
 	}
@@ -122,7 +122,8 @@ export const buildSrc = async(options?: RunOptions): Promise<void> => {
 			throw new Error("git rev-parse error");
 		}
 
-		const pokemonShowdownDist = [path.join(pokemonShowdown, "dist")];
+		const pokemonShowdownBaseDist = path.join(pokemonShowdown, "dist");
+		const pokemonShowdownDistFolders = [path.join(pokemonShowdownBaseDist, "data"), path.join(pokemonShowdownBaseDist, "sim")];
 
 		const currentSha = revParseOutput.replace("\n", "");
 		const differentSha = currentSha !== lanetteSha;
@@ -151,7 +152,7 @@ export const buildSrc = async(options?: RunOptions): Promise<void> => {
 
 			console.log("Updated pokemon-showdown to latest compatible commit (" + lanetteSha.substr(0, 7) + ")");
 		} else {
-			for (const dist of pokemonShowdownDist) {
+			for (const dist of pokemonShowdownDistFolders) {
 				if (!fs.existsSync(dist)) {
 					installPokemonShowdownDependencies = true;
 					break;
@@ -177,9 +178,7 @@ export const buildSrc = async(options?: RunOptions): Promise<void> => {
 
 		console.log("Running pokemon-showdown build script...");
 
-		for (const dist of pokemonShowdownDist) {
-			deleteFolderRecursive(dist);
-		}
+		deleteFolderRecursive(pokemonShowdownBaseDist);
 
 		const nodeBuildOutput = exec('node build');
 		if (nodeBuildOutput === false) {
@@ -193,7 +192,7 @@ export const buildSrc = async(options?: RunOptions): Promise<void> => {
 	if (!options.noBuild) {
 		console.log("Running esbuild...");
 
-		await transpile({ci: options.ci});
+		transpile();
 
 		console.log("Successfully built files");
 	}

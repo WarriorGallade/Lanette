@@ -204,6 +204,11 @@ export let disallowQueueingPastTournaments: string[] = [];
 export let tournamentRoomAdvertisements: Dict<string[]> = {};
 
 /**
+ * For each room in the object, a list of rooms (roomids) where created tournament games will be advertised
+ */
+export let tournamentGameRoomAdvertisements: Dict<string[]> = {};
+
+/**
  * The number of minutes to set for the auto DQ timer in tournaments
  */
 export let tournamentAutoDQTimers: Dict<number> = {};
@@ -257,6 +262,11 @@ export let tournamentTrainerCardBadges: Dict<{name: string; source: string; widt
  * For each ribbon in the object, the link to the ribbon image
  */
 export let tournamentTrainerCardRibbons: Dict<{name: string; source: string; width: number; height: number}> = {};
+
+/**
+ * For each room in the object, the ribbons that can be added to tournament trainer cards
+ */
+export let enabledTournamentTrainerCardRibbons: Dict<string[]> = {};
 
 /**
  * A list of rooms (roomids) where the tournament points shop can be accesssed
@@ -321,7 +331,12 @@ export let allowGameAchievements: string[] = [];
 /**
  * For each room in the object, the subroomid that should be used for tournament games
  */
- export let tournamentGamesSubRoom: Dict<string> = {};
+export let tournamentGamesSubRoom: Dict<string> = {};
+
+/**
+ * A list of rooms (roomids) where tournaments for tournament games are created in the same room
+ */
+export let tournamentGamesSameRoom: string[] = [];
 
 /**
  * A list of rooms (roomids) where game trainer cards are shown for winners

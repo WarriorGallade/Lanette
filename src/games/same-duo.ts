@@ -12,7 +12,7 @@ class SameDuo extends SameBattleEliminationTournament {
 	startingTeamsLength = 2;
 	baseHtmlPageGameName = name;
 	htmlPageGameDescription = description;
-	battleFormatId = 'gen82v2doubles';
+	battleFormatId = 'gen92v2doubles';
 	battleFormatType: GameType = 'doubles';
 	banlist: string[] = ['Calyrex-Ice', 'Calyrex-Shadow', 'Cottonee', 'Dialga', 'Eternatus', 'Giratina', 'Giratina-Origin', 'Groudon',
 		'Ho-Oh', 'Jirachi', 'Kyogre', 'Kyurem-White', 'Lugia', 'Lunala', 'Magearna', 'Marshadow', 'Melmetal', 'Mewtwo',
@@ -20,7 +20,8 @@ class SameDuo extends SameBattleEliminationTournament {
 		'Urshifu-Rapid-Strike', 'Whimsicott', 'Xerneas', 'Yveltal', 'Zacian', 'Zacian-Crowned', 'Zamazenta', 'Zamazenta-Crowned', 'Zekrom'];
 
 	getGameCustomRules(): string[] {
-		return ['-Moody', '-Power Construct', '-Focus Sash', '-Ally Switch', '-Final Gambit', '-Perish Song', '-Swagger'];
+		return ['-Moody', '-Power Construct', '-Focus Sash', '-Ally Switch', '-Final Gambit', '-Perish Song', '-Swagger',
+			'Terastal Clause'];
 	}
 }
 

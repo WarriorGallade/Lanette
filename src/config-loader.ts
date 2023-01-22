@@ -78,6 +78,7 @@ export function load(config: typeof Config): typeof Config {
 	if (config.tournamentGamesSubRoom) {
 		config.tournamentGamesSubRoom = objectKeysToRoomId(stringObjectToRoomIds(config.tournamentGamesSubRoom));
 	}
+	if (config.tournamentGamesSameRoom) config.tournamentGamesSameRoom = arrayToRoomIds(config.tournamentGamesSameRoom);
 	if (config.showGameTrainerCards) config.showGameTrainerCards = arrayToRoomIds(config.showGameTrainerCards);
 	if (config.gameTrainerCardRequirements) objectKeysToRoomId(config.gameTrainerCardRequirements);
 	if (config.showGameHostBoxes) config.showGameHostBoxes = arrayToRoomIds(config.showGameHostBoxes);
@@ -136,12 +137,18 @@ export function load(config: typeof Config): typeof Config {
 	if (config.tournamentRoomAdvertisements) {
 		config.tournamentRoomAdvertisements = objectKeysToRoomId(stringArrayObjectToRoomIds(config.tournamentRoomAdvertisements));
 	}
+	if (config.tournamentGameRoomAdvertisements) {
+		config.tournamentGameRoomAdvertisements = objectKeysToRoomId(stringArrayObjectToRoomIds(config.tournamentGameRoomAdvertisements));
+	}
 	if (config.randomTournamentTimers) objectKeysToRoomId(config.randomTournamentTimers);
 	if (config.tournamentRules) objectKeysToRoomId(config.tournamentRules);
 	if (config.allowUserHostedTournaments) config.allowUserHostedTournaments = arrayToRoomIds(config.allowUserHostedTournaments);
 	if (config.showTournamentTrainerCards) config.showTournamentTrainerCards = arrayToRoomIds(config.showTournamentTrainerCards);
 	if (config.sharedTournamentTrainerCards) {
 		config.sharedTournamentTrainerCards = objectKeysToRoomId(stringObjectToRoomIds(config.sharedTournamentTrainerCards));
+	}
+	if (config.enabledTournamentTrainerCardRibbons) {
+		config.enabledTournamentTrainerCardRibbons = objectKeysToRoomId(stringArrayObjectToIds(config.enabledTournamentTrainerCardRibbons));
 	}
 	if (config.tournamentTrainerCardBadges) config.tournamentTrainerCardBadges = objectKeysToId(config.tournamentTrainerCardBadges);
 	if (config.tournamentPointsShop) config.tournamentPointsShop = arrayToRoomIds(config.tournamentPointsShop);

@@ -811,8 +811,8 @@ export class Games {
 
 						if (!pmRoom) return this.say(CommandParser.getErrorText(['noPmGameRoom']));
 					} else {
-						if (!user.hasRank(room, 'voice') || room.game || room.userHostedGame || !Config.allowScriptedGames ||
-							!Config.allowScriptedGames.includes(room.id)) return;
+						if (!global.Games.canUseRestrictedCommand(room, user) || room.game || room.userHostedGame ||
+							!Config.allowScriptedGames || !Config.allowScriptedGames.includes(room.id)) return;
 						if (!Users.self.hasRank(room, 'bot')) return this.sayError(['missingBotRankForFeatures', 'scripted game']);
 						const remainingGameCooldown = global.Games.getRemainingGameCooldown(room, true);
 						if (remainingGameCooldown > 1000) {
@@ -1221,6 +1221,15 @@ export class Games {
 			this.lastUserHostedGames[room.id] > this.lastScriptedGames[room.id])) {
 			return true;
 		}
+		return false;
+	}
+
+	canUseRestrictedCommand(room: Room, user: User, infoCommand?: boolean): boolean {
+		if (user.hasRank(room, infoCommand ? 'star' : 'voice') || user.isDeveloper()) return true;
+
+		const database = Storage.getDatabase(room);
+		if (database.gameManagers && database.gameManagers.includes(user.id)) return true;
+
 		return false;
 	}
 
@@ -1662,6 +1671,22 @@ export class Games {
 		if (!options.gen) options.gen = Dex.getGen();
 		const dex = Dex.getDex('gen' + options.gen);
 		return this.getPokemonList(options).map(x => dex.getPokemonCopy(x));
+	}
+
+	unrefDex(): void {
+		Tools.unrefProperties(this.abilitiesLists);
+		Tools.unrefProperties(this.itemsLists);
+		Tools.unrefProperties(this.movesLists);
+		Tools.unrefProperties(this.nationalDexPokemonLists);
+		Tools.unrefProperties(this.pokemonLists);
+
+		/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+		this.abilitiesLists = Object.create(null);
+		this.itemsLists = Object.create(null);
+		this.movesLists = Object.create(null);
+		this.nationalDexPokemonLists = Object.create(null);
+		this.pokemonLists = Object.create(null);
+		/* eslint-enable */
 	}
 
 	getEffectivenessScore(source: string | IMove, target: string | readonly string[] | IPokemon, inverseTypes?: boolean): number {
